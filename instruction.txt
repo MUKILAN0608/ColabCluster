@@ -1,0 +1,239 @@
+STEP 2 — BUILD THE COLABCLUSTER CONTROLLER
+
+You are working on an open-source project called "ColabCluster".
+
+PROJECT PURPOSE:
+ColabCluster is a lightweight distributed AI orchestration platform for ephemeral and heterogeneous GPU workers. Google Colab T4/L4 GPUs will eventually connect as workers and receive AI workloads from a controller running on the user's PC.
+
+IMPORTANT:
+Implement ONLY STEP 2 — the local Controller.
+Do NOT implement or connect Google Colab yet.
+Do NOT implement workers, networking/tunneling, scheduling, task execution, Ray, PyTorch Distributed, Redis, databases, authentication, or dashboards.
+
+CURRENT PROJECT STRUCTURE:
+
+colabcluster/
+├── controller/
+├── worker/
+├── common/
+├── config/
+├── examples/
+├── tests/
+├── .gitignore
+├── README.md
+├── requirements.txt
+└── pyproject.toml
+
+GOAL:
+Build a FastAPI-based Controller that runs locally on the user's PC and provides the initial control-plane API.
+
+CREATE THESE FILES:
+
+controller/
+├── __init__.py
+├── main.py
+├── api.py
+└── registry.py
+
+1. controller/main.py
+- Create the FastAPI application.
+- Application name: "ColabCluster Controller"
+- Version: "0.1.0"
+- Register the API routes.
+- Provide a clean application entry point.
+- Do not put business logic directly in main.py.
+
+2. controller/api.py
+Implement these endpoints:
+
+GET /health
+- Return:
+  {
+    "status": "healthy",
+    "service": "colabcluster-controller",
+    "version": "0.1.0"
+  }
+
+GET /workers
+- Return the currently registered workers.
+- Initially this should return an empty worker list.
+
+POST /workers/register
+- Accept worker registration information.
+- Registration should include at minimum:
+  worker_id
+  gpu
+  gpu_memory
+  status
+- Store the worker in the registry.
+- Return a clear success response.
+
+POST /workers/heartbeat
+- Accept worker_id.
+- Update the worker's last_seen timestamp.
+- Return a success response.
+- Return an appropriate 404/error if the worker does not exist.
+
+POST /workers/unregister
+- Accept worker_id.
+- Remove the worker from the registry.
+- Return a clear success response.
+- Return an appropriate 404/error if the worker does not exist.
+
+3. controller/registry.py
+Implement an in-memory WorkerRegistry.
+
+Each worker should store at minimum:
+
+- worker_id
+- gpu
+- gpu_memory
+- status
+- registered_at
+- last_seen
+
+Required operations:
+
+- register_worker()
+- get_worker()
+- get_workers()
+- update_heartbeat()
+- unregister_worker()
+
+Use Python datetime/timezone-aware timestamps.
+
+Do NOT introduce Redis, PostgreSQL, MongoDB, or any external database at this stage.
+
+4. DATA VALIDATION
+Use Pydantic models for API request/response data.
+
+Keep the schemas simple and clean.
+
+5. ERROR HANDLING
+Implement sensible HTTP errors:
+
+- Duplicate worker registration → HTTP 409
+- Unknown worker → HTTP 404
+- Invalid request → FastAPI/Pydantic validation error
+
+Return clear JSON error messages.
+
+6. CODE QUALITY
+Follow these rules:
+
+- Python type hints
+- Clear docstrings
+- Small functions
+- No unnecessary dependencies
+- No hardcoded machine-specific paths
+- No secrets
+- No Colab-specific code
+- No scheduler logic
+- No task execution logic
+
+7. TESTS
+Create basic tests under:
+
+tests/
+
+Test at least:
+
+- /health works
+- /workers initially returns no workers
+- worker registration works
+- duplicate registration is rejected
+- heartbeat updates an existing worker
+- heartbeat for unknown worker returns 404
+- worker unregister works
+- unregistering an unknown worker returns 404
+
+Use FastAPI's TestClient.
+
+8. RUN THE CONTROLLER
+
+The controller must run with:
+
+uvicorn controller.main:app --reload
+
+It should listen on:
+
+http://127.0.0.1:8000
+
+9. VERIFY THE API
+
+Verify:
+
+GET http://127.0.0.1:8000/health
+
+Expected:
+
+{
+  "status": "healthy",
+  "service": "colabcluster-controller",
+  "version": "0.1.0"
+}
+
+Verify:
+
+GET http://127.0.0.1:8000/workers
+
+Expected initially:
+
+{
+  "workers": []
+}
+
+Verify the Swagger UI:
+
+http://127.0.0.1:8000/docs
+
+10. RUN TESTS
+
+Run the complete test suite and report:
+
+- number of tests
+- passed
+- failed
+
+11. UPDATE README.md
+
+Add a short "Controller" section explaining:
+
+- The controller is the ColabCluster control plane.
+- It currently maintains an in-memory worker registry.
+- It exposes health, registration, heartbeat, and unregister APIs.
+- Persistent storage and distributed scheduling are intentionally not implemented yet.
+
+12. IMPORTANT SCOPE LIMIT
+
+STOP after completing Step 2.
+
+Do NOT proceed to Step 3.
+
+Do NOT create the Colab worker.
+
+Do NOT connect a Google Colab runtime.
+
+Do NOT implement networking/tunneling.
+
+Do NOT implement task scheduling.
+
+At the end, provide a concise verification report containing:
+
+1. Files created/modified
+2. Controller startup command
+3. API endpoints implemented
+4. Test results
+5. Example /health response
+6. Confirmation that NO Colab worker has been implemented
+
+The expected final architecture after Step 2 is:
+
+YOUR PC
+  │
+  ▼
+FastAPI Controller
+  │
+  └── In-memory Worker Registry
+
+There should be NO Colab connection yet.
