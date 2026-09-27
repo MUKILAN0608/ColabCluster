@@ -19,3 +19,4 @@ checkpoints/
 secrets/
 *.key
 *.pem
+instruction.txt
