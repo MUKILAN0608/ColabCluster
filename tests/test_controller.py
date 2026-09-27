@@ -7,7 +7,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from controller.main import create_app
-from controller.registry import UnknownWorkerError, WorkerRegistration, WorkerRegistry
+from common.schemas import WorkerRegistration
+from controller.registry import UnknownWorkerError, WorkerRegistry
 
 
 @pytest.fixture
@@ -81,7 +82,9 @@ def test_unregister(client, registration):
     client.post("/workers/register", json=registration)
     response = client.post("/workers/unregister", json={"worker_id": "local-test"})
     assert response.status_code == 200
-    assert response.json() == {"message": "Worker unregistered", "worker_id": "local-test"}
+    assert response.json() == {
+        "success": True, "message": "Worker unregistered", "worker_id": "local-test"
+    }
     assert client.get("/workers").json() == {"workers": []}
     assert client.post("/workers/heartbeat", json={"worker_id": "local-test"}).status_code == 404
     assert client.post("/workers/register", json=registration).status_code == 201

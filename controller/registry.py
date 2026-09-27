@@ -3,25 +3,7 @@
 from datetime import datetime, timezone
 from threading import Lock
 
-from pydantic import BaseModel, ConfigDict, Field
-
-
-class WorkerRegistration(BaseModel):
-    """Worker metadata; GPU memory is expressed in GiB."""
-
-    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-
-    worker_id: str = Field(min_length=1)
-    gpu: str = Field(min_length=1)
-    gpu_memory: float = Field(ge=0, allow_inf_nan=False)
-    status: str = Field(min_length=1)
-
-
-class Worker(WorkerRegistration):
-    """Registered metadata and controller-generated UTC timestamps."""
-
-    registered_at: datetime
-    last_seen: datetime
+from common.schemas import WorkerInfo, WorkerRegistration, WorkerStatus
 
 
 class DuplicateWorkerError(Exception):
@@ -36,35 +18,37 @@ class WorkerRegistry:
     """Store workers in memory and return copies to protect internal state."""
 
     def __init__(self) -> None:
-        self._workers: dict[str, Worker] = {}
+        self._workers: dict[str, WorkerInfo] = {}
         self._lock = Lock()
 
-    def register_worker(self, registration: WorkerRegistration) -> Worker:
+    def register_worker(self, registration: WorkerRegistration) -> WorkerInfo:
         """Register a unique worker with controller-generated timestamps."""
         with self._lock:
             if registration.worker_id in self._workers:
                 raise DuplicateWorkerError(registration.worker_id)
             now = datetime.now(timezone.utc)
-            worker = Worker(**registration.model_dump(), registered_at=now, last_seen=now)
+            worker = WorkerInfo(**registration.model_dump(), registered_at=now, last_seen=now)
             self._workers[worker.worker_id] = worker
-            return worker.model_copy()
+            return worker.model_copy(deep=True)
 
-    def get_worker(self, worker_id: str) -> Worker:
+    def get_worker(self, worker_id: str) -> WorkerInfo:
         """Return a worker, or raise UnknownWorkerError."""
         with self._lock:
-            return self._require_worker(worker_id).model_copy()
+            return self._require_worker(worker_id).model_copy(deep=True)
 
-    def get_workers(self) -> list[Worker]:
+    def get_workers(self) -> list[WorkerInfo]:
         """Return a snapshot of registered workers."""
         with self._lock:
-            return [worker.model_copy() for worker in self._workers.values()]
+            return [worker.model_copy(deep=True) for worker in self._workers.values()]
 
-    def update_heartbeat(self, worker_id: str) -> Worker:
+    def update_heartbeat(self, worker_id: str, status: WorkerStatus | None = None) -> WorkerInfo:
         """Refresh an existing worker's last-seen timestamp."""
         with self._lock:
             worker = self._require_worker(worker_id)
             worker.last_seen = datetime.now(timezone.utc)
-            return worker.model_copy()
+            if status is not None:
+                worker.status = status
+            return worker.model_copy(deep=True)
 
     def unregister_worker(self, worker_id: str) -> None:
         """Remove an existing worker, or raise UnknownWorkerError."""
@@ -72,7 +56,7 @@ class WorkerRegistry:
             self._require_worker(worker_id)
             del self._workers[worker_id]
 
-    def _require_worker(self, worker_id: str) -> Worker:
+    def _require_worker(self, worker_id: str) -> WorkerInfo:
         """Look up internal state while the caller holds the lock."""
         try:
             return self._workers[worker_id]

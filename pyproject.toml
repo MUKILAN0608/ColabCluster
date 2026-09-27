@@ -21,7 +21,7 @@ dependencies = [
 test = ["pytest", "httpx"]
 
 [tool.setuptools.packages.find]
-include = ["controller*"]
+include = ["controller*", "common*", "worker*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

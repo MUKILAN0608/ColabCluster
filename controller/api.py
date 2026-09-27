@@ -1,54 +1,15 @@
 """Validated HTTP routes for the local controller."""
 
-from typing import Annotated, Literal
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
-
-from controller.registry import (
-    DuplicateWorkerError,
-    UnknownWorkerError,
-    Worker,
-    WorkerRegistration,
-    WorkerRegistry,
+from common.schemas import (
+    HealthResponse, WorkersResponse, WorkerRegistration, WorkerRegistrationResponse,
+    WorkerHeartbeat, WorkerHeartbeatResponse, WorkerUnregister, WorkerUnregisterResponse,
 )
+from controller.registry import DuplicateWorkerError, UnknownWorkerError, WorkerRegistry
 
 router = APIRouter()
-
-
-class HealthResponse(BaseModel):
-    """Controller health information."""
-
-    status: Literal["healthy"] = "healthy"
-    service: Literal["colabcluster-controller"] = "colabcluster-controller"
-    version: Literal["0.1.0"] = "0.1.0"
-
-
-class WorkersResponse(BaseModel):
-    """Snapshot of registered workers."""
-
-    workers: list[Worker]
-
-
-class WorkerIdRequest(BaseModel):
-    """Identify a registered worker."""
-
-    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-    worker_id: str = Field(min_length=1)
-
-
-class WorkerResponse(BaseModel):
-    """Successful registration or heartbeat."""
-
-    message: str
-    worker: Worker
-
-
-class UnregisterResponse(BaseModel):
-    """Confirmation that a worker was removed."""
-
-    message: str
-    worker_id: str
 
 
 def get_registry(request: Request) -> WorkerRegistry:
@@ -71,31 +32,37 @@ def list_workers(registry: Registry) -> WorkersResponse:
     return WorkersResponse(workers=registry.get_workers())
 
 
-@router.post("/workers/register", response_model=WorkerResponse, status_code=201)
-def register_worker(payload: WorkerRegistration, registry: Registry) -> WorkerResponse:
+@router.post("/workers/register", response_model=WorkerRegistrationResponse, status_code=201)
+def register_worker(payload: WorkerRegistration, registry: Registry) -> WorkerRegistrationResponse:
     """Register a worker with a unique ID."""
     try:
         worker = registry.register_worker(payload)
     except DuplicateWorkerError:
         raise HTTPException(409, f"Worker '{payload.worker_id}' is already registered") from None
-    return WorkerResponse(message="Worker registered", worker=worker)
+    return WorkerRegistrationResponse(
+        success=True, worker_id=worker.worker_id, message="Worker registered", worker=worker
+    )
 
 
-@router.post("/workers/heartbeat", response_model=WorkerResponse)
-def heartbeat(payload: WorkerIdRequest, registry: Registry) -> WorkerResponse:
+@router.post("/workers/heartbeat", response_model=WorkerHeartbeatResponse)
+def heartbeat(payload: WorkerHeartbeat, registry: Registry) -> WorkerHeartbeatResponse:
     """Update the last-seen time of an existing worker."""
     try:
-        worker = registry.update_heartbeat(payload.worker_id)
+        status = payload.status if "status" in payload.model_fields_set else None
+        worker = registry.update_heartbeat(payload.worker_id, status=status)
     except UnknownWorkerError:
         raise HTTPException(404, f"Worker '{payload.worker_id}' not found") from None
-    return WorkerResponse(message="Heartbeat received", worker=worker)
+    return WorkerHeartbeatResponse(
+        success=True, worker_id=worker.worker_id, message="Heartbeat received",
+        server_timestamp=worker.last_seen, worker=worker,
+    )
 
 
-@router.post("/workers/unregister", response_model=UnregisterResponse)
-def unregister_worker(payload: WorkerIdRequest, registry: Registry) -> UnregisterResponse:
+@router.post("/workers/unregister", response_model=WorkerUnregisterResponse)
+def unregister_worker(payload: WorkerUnregister, registry: Registry) -> WorkerUnregisterResponse:
     """Remove an existing worker from memory."""
     try:
         registry.unregister_worker(payload.worker_id)
     except UnknownWorkerError:
         raise HTTPException(404, f"Worker '{payload.worker_id}' not found") from None
-    return UnregisterResponse(message="Worker unregistered", worker_id=payload.worker_id)
+    return WorkerUnregisterResponse(success=True, message="Worker unregistered", worker_id=payload.worker_id)
