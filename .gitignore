@@ -20,3 +20,7 @@ secrets/
 *.key
 *.pem
 instruction.txt
+
+# Generated upload bundle
+
+artifacts/

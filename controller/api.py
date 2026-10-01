@@ -4,9 +4,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from common.schemas import (
-    HealthResponse, WorkersResponse, WorkerRegistration, WorkerRegistrationResponse,
+    ClusterSummary, HealthResponse, WorkersResponse, WorkerRegistration, WorkerRegistrationResponse,
     WorkerHeartbeat, WorkerHeartbeatResponse, WorkerUnregister, WorkerUnregisterResponse,
 )
+from common.schemas import GpuTestRequest, GpuTestResponse
+from controller.gpu_test import forward_gpu_test
 from controller.registry import DuplicateWorkerError, UnknownWorkerError, WorkerRegistry
 
 router = APIRouter()
@@ -27,9 +29,9 @@ def health() -> HealthResponse:
 
 
 @router.get("/workers", response_model=WorkersResponse)
-def list_workers(registry: Registry) -> WorkersResponse:
+def list_workers(request: Request, registry: Registry) -> WorkersResponse:
     """List all workers currently in memory."""
-    return WorkersResponse(workers=registry.get_workers())
+    return WorkersResponse(workers=registry.get_workers(timeout=request.app.state.worker_timeout))
 
 
 @router.post("/workers/register", response_model=WorkerRegistrationResponse, status_code=201)
@@ -49,7 +51,10 @@ def heartbeat(payload: WorkerHeartbeat, registry: Registry) -> WorkerHeartbeatRe
     """Update the last-seen time of an existing worker."""
     try:
         status = payload.status if "status" in payload.model_fields_set else None
-        worker = registry.update_heartbeat(payload.worker_id, status=status)
+        worker = registry.update_heartbeat(
+            payload.worker_id, status=status, gpu_utilization=payload.gpu_utilization,
+            gpu_memory_used=payload.gpu_memory_used,
+        )
     except UnknownWorkerError:
         raise HTTPException(404, f"Worker '{payload.worker_id}' not found") from None
     return WorkerHeartbeatResponse(
@@ -66,3 +71,19 @@ def unregister_worker(payload: WorkerUnregister, registry: Registry) -> WorkerUn
     except UnknownWorkerError:
         raise HTTPException(404, f"Worker '{payload.worker_id}' not found") from None
     return WorkerUnregisterResponse(success=True, message="Worker unregistered", worker_id=payload.worker_id)
+
+
+@router.get("/cluster", response_model=ClusterSummary)
+def cluster_summary(request: Request, registry: Registry) -> ClusterSummary:
+    """Summarize currently active workers and their separate GPU capacities."""
+    return registry.get_cluster_summary(timeout=request.app.state.worker_timeout)
+
+
+@router.post("/workers/{worker_id}/gpu-test", response_model=GpuTestResponse)
+def gpu_test(worker_id: str, payload: GpuTestRequest, request: Request, registry: Registry) -> GpuTestResponse:
+    """Forward a bounded GPU diagnostic to a selected active worker."""
+    workers = registry.get_workers(timeout=request.app.state.worker_timeout)
+    worker = next((item for item in workers if item.worker_id == worker_id), None)
+    if worker is None:
+        raise HTTPException(404, "Worker is not active")
+    return forward_gpu_test(worker, payload)

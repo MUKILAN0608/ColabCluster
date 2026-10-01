@@ -40,6 +40,8 @@ class WorkerInfo(WorkerRegistration):
 
     registered_at: AwareDatetime
     last_seen: AwareDatetime
+    gpu_utilization: float | None = Field(default=None, ge=0, le=100, allow_inf_nan=False)
+    gpu_memory_used: float | None = Field(default=None, ge=0, allow_inf_nan=False)
 
 
 class WorkerRegistrationResponse(ProtocolModel):
@@ -122,3 +124,37 @@ class LocalWorkerInfo(ProtocolModel):
 
     worker_id: str = Field(min_length=1)
     hardware: HardwareInfo
+
+
+class ClusterSummary(ProtocolModel):
+    """One active snapshot; memory is aggregate GiB across separate GPUs."""
+
+    total_workers: int = Field(ge=0)
+    ready_workers: int = Field(ge=0)
+    busy_workers: int = Field(ge=0)
+    total_gpu_memory: float = Field(ge=0, allow_inf_nan=False)
+    gpus: dict[str, int]
+    workers: list[WorkerInfo]
+
+
+class GpuTestRequest(ProtocolModel):
+    """Bounded CUDA matrix multiplication diagnostic."""
+
+    matrix_size: int = Field(default=4096, ge=256, le=8192, strict=True)
+    iterations: int = Field(default=20, ge=1, le=100, strict=True)
+
+
+class GpuTestResponse(ProtocolModel):
+    """Actual worker benchmark measurements; memory is measured in GiB."""
+
+    worker_id: str = Field(min_length=1)
+    gpu: str = Field(min_length=1)
+    cuda_available: bool
+    cuda_version: str
+    torch_version: str
+    matrix_size: int = Field(ge=256, le=8192)
+    iterations: int = Field(ge=1, le=100)
+    total_time_seconds: float = Field(gt=0, allow_inf_nan=False)
+    average_time_ms: float = Field(gt=0, allow_inf_nan=False)
+    gpu_memory_allocated_gb: float = Field(ge=0, allow_inf_nan=False)
+    result_shape: tuple[int, int]

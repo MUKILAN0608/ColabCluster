@@ -3,7 +3,7 @@
 import os
 from uuid import uuid4
 
-from common.schemas import HardwareInfo, LocalWorkerInfo
+from common.schemas import HardwareInfo, LocalWorkerInfo, WorkerStatus
 from worker.hardware import get_hardware_info
 
 # An immutable fallback identity, generated once per interpreter process.
@@ -24,6 +24,16 @@ class Worker:
         if not identifier:
             raise ValueError("worker_id cannot be empty")
         self._info = LocalWorkerInfo(worker_id=identifier, hardware=get_hardware_info())
+        self.status = WorkerStatus.READY
+
+    @property
+    def status(self) -> WorkerStatus:
+        """Current operational state sent in heartbeats."""
+        return self._status
+
+    @status.setter
+    def status(self, value: WorkerStatus) -> None:
+        self._status = WorkerStatus(value)
 
     @property
     def worker_id(self) -> str:
@@ -39,12 +49,11 @@ class Worker:
         return self._info
 
 
-def main() -> None:
-    """Print actual local hardware information and exit without networking."""
-    worker = Worker()
+def print_worker_info(worker: Worker, title: str = "COLABCLUSTER WORKER") -> None:
+    """Display an existing worker without repeating hardware detection."""
     hardware = worker.get_hardware_info()
     print("=" * 40)
-    print("        COLABCLUSTER WORKER")
+    print(f"        {title}")
     print("=" * 40)
     for label, value in (
         ("Worker ID", worker.worker_id),
@@ -59,6 +68,11 @@ def main() -> None:
     ):
         print(f"{label:<15}: {value}")
     print("=" * 40)
+
+
+def main() -> None:
+    """Print actual local hardware information and exit without networking."""
+    print_worker_info(Worker())
 
 
 if __name__ == "__main__":

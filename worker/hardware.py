@@ -2,6 +2,7 @@
 
 import importlib
 import logging
+import math
 import platform
 
 import psutil
@@ -9,6 +10,32 @@ import psutil
 from common.schemas import HardwareInfo
 
 BYTES_PER_GIB = 1024 ** 3
+
+
+def get_gpu_metrics(cuda_available: bool) -> tuple[float | None, float | None]:
+    """Best-effort utilization percent and global used VRAM in GiB for device 0."""
+    if not cuda_available:
+        return None, None
+    try:
+        torch = importlib.import_module("torch")
+    except Exception:
+        return None, None
+    utilization = None
+    memory_used = None
+    try:
+        value = float(torch.cuda.utilization(0))
+        if math.isfinite(value) and 0 <= value <= 100:
+            utilization = value
+    except Exception:
+        pass  # Optional NVML support may be absent even when CUDA is available.
+    try:
+        free, total = torch.cuda.mem_get_info(0)
+        value = (float(total) - float(free)) / BYTES_PER_GIB
+        if 0 <= free <= total and math.isfinite(value):
+            memory_used = value
+    except Exception:
+        pass  # A metrics failure must not prevent the heartbeat itself.
+    return utilization, memory_used
 
 
 def _detect_gpu() -> tuple[str, float, bool, str | None]:

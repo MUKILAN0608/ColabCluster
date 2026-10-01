@@ -68,7 +68,9 @@ def test_heartbeat_updates_timestamp(client, registration):
     worker = response.json()["worker"]
     assert worker["registered_at"] == original["registered_at"]
     assert datetime.fromisoformat(worker["last_seen"].replace("Z", "+00:00")) == later
-    assert client.get("/workers").json() == {"workers": [worker]}
+    with patch("controller.registry.datetime") as clock:
+        clock.now.return_value = later
+        assert client.get("/workers").json() == {"workers": [worker]}
 
 
 @pytest.mark.parametrize("endpoint", ["heartbeat", "unregister"])
@@ -110,7 +112,7 @@ def test_docs(client):
     schema = client.get("/openapi.json").json()
     assert schema["info"]["title"] == "ColabCluster Controller"
     assert schema["info"]["version"] == "0.1.0"
-    assert len(schema["paths"]) == 5
+    assert len(schema["paths"]) == 7
 
 
 def test_app_instances_are_isolated(client, registration):
