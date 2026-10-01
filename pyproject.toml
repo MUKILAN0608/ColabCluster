@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "colabcluster"
+version = "0.1.0"
+description = "A lightweight open-source distributed AI orchestration platform for ephemeral and heterogeneous GPU workers."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic>=2,<3",
+    "requests",
+    "psutil",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+test = ["pytest", "httpx"]
+
+[tool.setuptools.packages.find]
+include = ["controller*", "common*", "worker*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
