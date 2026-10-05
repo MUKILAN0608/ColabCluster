@@ -620,3 +620,72 @@ Automated tests mock GPU operations and verify routing, shape, inference mode,
 status cleanup, and concurrency. They do **not** prove real T4 execution; perform
 the manual integration check above for that confirmation. This is a diagnostic,
 not a training benchmark.
+
+## Two independent Colab workers
+
+The existing registry and dashboard support this setup without a scheduler:
+
+```text
+Controller (Windows, port 8000)
+   |-- Colab Worker A (its own runtime and diagnostic tunnel)
+   `-- Colab Worker B (a second runtime and diagnostic tunnel)
+```
+
+Each runtime needs a unique worker ID, its own diagnostic server, its own
+reachable `COLABCLUSTER_WORKER_URL`, and a continuously running heartbeat loop.
+Both use the same reachable controller URL. Keep the existing controller and
+its tunnel running; do not start a second controller on port 8000.
+
+After uploading/extracting the worker bundle and completing the existing Colab
+setup in each runtime, configure the environment in a Python cell. Replace URL
+placeholders with the actual tunnel URLs before running:
+
+```python
+import os
+os.environ["COLABCLUSTER_CONTROLLER_URL"] = "https://<controller-tunnel>.trycloudflare.com"
+os.environ["COLABCLUSTER_WORKER_ID"] = "COLAB-GPU-TEST"  # Worker A
+os.environ["COLABCLUSTER_WORKER_URL"] = "https://<worker-a-tunnel>.trycloudflare.com"
+```
+
+In the **second Colab runtime**, use the same controller URL but these values:
+
+```python
+os.environ["COLABCLUSTER_WORKER_ID"] = "COLAB-GPU-TEST-B"
+os.environ["COLABCLUSTER_WORKER_URL"] = "https://<worker-b-tunnel>.trycloudflare.com"
+```
+
+Each worker tunnel must forward to `http://127.0.0.1:8001` in its own runtime.
+Separate runtimes can both use local port 8001. From the extracted project
+directory in **each Colab runtime**, run and leave this cell running:
+
+```python
+!python -u -m worker.colab_worker
+```
+
+That entry point creates `create_diagnostic_app(worker)` automatically when
+`COLABCLUSTER_WORKER_URL` is set, registers the worker, and sends heartbeats.
+Do not launch `uvicorn worker.diagnostics:app`; there is no module-level app.
+Running the worker in Windows PowerShell registers the Windows machine, not
+the Colab GPU. Restart a worker to apply changed environment variables; after
+a controller restart, restart both workers to register them again.
+
+Check both records from Windows PowerShell:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/workers | ConvertTo-Json -Depth 6
+Invoke-RestMethod http://127.0.0.1:8000/cluster | ConvertTo-Json -Depth 6
+```
+
+Verify two distinct IDs, Tesla T4/CUDA metadata, different diagnostic URLs,
+and advancing `last_seen` values for both. Open
+`http://127.0.0.1:8000/dashboard` to see a card for each worker. Manually run a
+diagnostic on A, then B; confirm each result identifies the selected worker
+and each returns to READY. The dashboard allows one diagnostic request at a
+time. Workers remain separate GPUs; reported aggregate memory is not pooled.
+Stopping one worker removes only its record, immediately on clean shutdown or
+after the heartbeat timeout on loss of connection.
+
+Automated two-worker integration tests use independent in-process diagnostic
+apps with simulated GPU results. They verify routing, metadata, heartbeat,
+status and removal isolation. They do not establish real two-T4 execution;
+that requires two actual Colab runtimes and the manual checks above.
