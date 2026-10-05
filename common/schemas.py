@@ -158,3 +158,26 @@ class GpuTestResponse(ProtocolModel):
     average_time_ms: float = Field(gt=0, allow_inf_nan=False)
     gpu_memory_allocated_gb: float = Field(ge=0, allow_inf_nan=False)
     result_shape: tuple[int, int]
+
+
+class NnTestRequest(ProtocolModel):
+    """An empty request selects the fixed diagnostic; no custom code or options."""
+
+
+class NnTestResponse(ProtocolModel):
+    """CUDA-only SmallMLP inference measurements, excluding network latency."""
+
+    worker_id: str = Field(min_length=1)
+    gpu: str = Field(min_length=1)
+    cuda_version: str
+    torch_version: str
+    device: Literal["cuda:0"]
+    model: Literal["SmallMLP"]
+    input_shape: tuple[Literal[128], Literal[784]]
+    batch_size: Literal[128]
+    forward_passes: Literal[100]
+    total_gpu_time_ms: float = Field(gt=0, allow_inf_nan=False)
+    average_inference_ms: float = Field(gt=0, allow_inf_nan=False)
+    peak_memory_mb: float = Field(ge=0, allow_inf_nan=False)
+    output_shape: tuple[Literal[128], Literal[10]]
+    status: Literal["passed"]

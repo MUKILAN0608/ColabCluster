@@ -481,3 +481,75 @@ Generate the one current upload archive from this directory:
 Upload `artifacts/colabcluster-worker.zip` to Colab. This generated distribution
 contains copies of runtime source for transfer; edit the source directories,
 never the archive. Old version-named bundles are no longer maintained.
+
+## GPU Dashboard
+
+Open **http://127.0.0.1:8000/dashboard** after starting the current controller:
+
+```powershell
+cd "C:\Users\Mukil\New folder (12)\colabcluster"
+.\.venv\Scripts\python.exe -m uvicorn controller.main:app --host 0.0.0.0 --port 8000
+```
+
+Stop any old controller before restarting; do not launch a duplicate on port 8000.
+The plain HTML/CSS/JavaScript dashboard is served by the same FastAPI application.
+It polls `/workers` and `/cluster` every 2.5 seconds and shows active workers,
+ready/busy counts, GPU capacity/types, heartbeat times, and reported telemetry.
+Missing metrics/versions display as unavailable, not zero or guessed values.
+On connection loss, cached cards are labeled stale and execution is disabled.
+Expired workers disappear on the next successful poll; this is not a history view.
+CUDA and PyTorch card versions come from existing metadata when available.
+
+**Run NN Test** triggers one predefined SmallMLP diagnostic on the selected remote
+worker. It does not accept code, model definitions, files, or training parameters.
+The model is `784 -> 128 -> ReLU -> 64 -> ReLU -> 10`, batch size 128, float32,
+three warmups and 100 timed inference passes with synthetic inputs. It requires
+CUDA and never silently falls back to CPU. No dataset downloads, training,
+persistent models, scheduling, or repeated background tests are performed.
+
+The controller forwards `POST /workers/{worker_id}/nn-test` to `/nn-test` on the
+existing worker diagnostic server. Both NN and matrix diagnostics share the same
+worker lock, so overlapping requests return 409 rather than being queued.
+`/gpu-test` remains unchanged. The controller exposes BUSY during the request,
+and the worker sets BUSY while executing; status is restored on completion or
+failure. Existing heartbeats keep running without protocol changes. A short test
+may finish between polls, so the clicked card also shows a local RUNNING state.
+Results are only kept in the current page; refresh clears them.
+
+CUDA synchronization brackets compute timing; reported timing excludes Cloudflare
+and HTTP latency. `peak_memory_mb` is in MiB (1024 squared bytes), measured using
+PyTorch's per-process/device peak allocated memory after resetting peak counters,
+and can include other live allocations in that worker process. Model/input/output
+references are released afterward; PyTorch may retain reusable allocator cache.
+Failures appear clearly in the dashboard. A network timeout does not cancel CUDA
+computation already in progress, and the diagnostic is not automatically retried.
+
+### Manual Colab NN verification
+
+1. Build and upload the current `artifacts/colabcluster-worker.zip` to Colab:
+   `.\.venv\Scripts\python.exe scripts/build_colab_bundle.py`.
+2. Start/restart the controller and its existing Cloudflare tunnel.
+3. Configure/start the Colab worker's existing tunnel forwarding to port 8001,
+   then run the updated Colab worker with both existing URL variables set:
+   `COLABCLUSTER_CONTROLLER_URL` (PC tunnel) and `COLABCLUSTER_WORKER_URL`
+   (Colab diagnostic tunnel). This uses the same setup as the matrix GPU test.
+   Restarting an old worker process is necessary to load the new `/nn-test` route.
+4. Confirm `/workers` shows your ready T4 with `metadata.diagnostic_url`.
+5. Open **http://127.0.0.1:8000/dashboard** and click **Run NN Test** on that worker.
+6. Verify **NN TEST PASSED**, Tesla T4, `device: cuda:0`, `SmallMLP`, input
+   `[128, 784]`, output `[128, 10]`, 100 passes, and nonzero timing measurements.
+7. Confirm the worker returns to READY. To run again, click again explicitly.
+
+The exact equivalent manual request from Windows PowerShell is:
+
+```powershell
+$workerId = "COLAB-GPU-TEST"  # Replace with the ID shown by /workers.
+Invoke-RestMethod -Method Post `
+    -Uri "http://127.0.0.1:8000/workers/$workerId/nn-test" `
+    -ContentType "application/json" -Body '{}' -TimeoutSec 135
+```
+
+No dashboard tooling or PyTorch is required on the controller for inference.
+Automated tests mock CUDA execution; the real T4 test is a manual integration
+check and its results must not be inferred from mocked tests. The existing
+development API/tunnel access model is unchanged; there is no new authentication.

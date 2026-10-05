@@ -1,6 +1,11 @@
 """Validated HTTP routes for the local controller."""
 
 from typing import Annotated
+from pathlib import Path
+from fastapi.responses import FileResponse
+from common.schemas import NnTestRequest, NnTestResponse
+from controller.nn_test import forward_nn_test
+from controller.registry import WorkerNotReadyError
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from common.schemas import (
@@ -87,3 +92,24 @@ def gpu_test(worker_id: str, payload: GpuTestRequest, request: Request, registry
     if worker is None:
         raise HTTPException(404, "Worker is not active")
     return forward_gpu_test(worker, payload)
+
+
+@router.get("/dashboard", response_class=FileResponse, include_in_schema=False)
+def dashboard() -> FileResponse:
+    """Serve the bundled, dependency-free GPU dashboard."""
+    return FileResponse(Path(__file__).with_name("static") / "dashboard.html", media_type="text/html")
+
+
+@router.post("/workers/{worker_id}/nn-test", response_model=NnTestResponse)
+def nn_test(worker_id: str, payload: NnTestRequest, request: Request, registry: Registry) -> NnTestResponse:
+    """Request one fixed remote CUDA inference diagnostic; no user code accepted."""
+    try:
+        worker, original = registry.begin_nn_test(worker_id, request.app.state.worker_timeout)
+    except UnknownWorkerError:
+        raise HTTPException(404, "Worker is not active") from None
+    except WorkerNotReadyError:
+        raise HTTPException(409, "Worker is not ready for an NN diagnostic") from None
+    try:
+        return forward_nn_test(worker)
+    finally:
+        registry.finish_nn_test(worker_id, original)

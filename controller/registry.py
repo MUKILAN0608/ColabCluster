@@ -13,6 +13,10 @@ class DuplicateWorkerError(Exception):
     """A worker ID is already registered."""
 
 
+class WorkerNotReadyError(Exception):
+    """The selected worker is already busy or not ready."""
+
+
 class UnknownWorkerError(Exception):
     """A worker ID is not registered."""
 
@@ -106,3 +110,21 @@ class WorkerRegistry:
             return self._workers[worker_id]
         except KeyError:
             raise UnknownWorkerError(worker_id) from None
+
+
+    def begin_nn_test(self, worker_id: str, timeout: float) -> tuple[WorkerInfo, WorkerInfo]:
+        """Reserve a ready worker and expose BUSY immediately to dashboard polls."""
+        with self._lock:
+            self._expire_locked(timeout, datetime.now(timezone.utc))
+            worker = self._require_worker(worker_id)
+            if worker.status != WorkerStatus.READY:
+                raise WorkerNotReadyError(worker_id)
+            worker.status = WorkerStatus.BUSY
+            return worker.model_copy(deep=True), worker
+
+    def finish_nn_test(self, worker_id: str, original: WorkerInfo) -> None:
+        """Restore only the same registration, never recreate an expired record."""
+        with self._lock:
+            current = self._workers.get(worker_id)
+            if current is original and current.status == WorkerStatus.BUSY:
+                current.status = WorkerStatus.READY

@@ -10,7 +10,13 @@ def main() -> None:
     destination.parent.mkdir(exist_ok=True)
     files = [p for folder in ("common", "controller", "worker", "testing")
              for p in sorted((root / folder).glob("*.py"))]
-    files += [root / name for name in ("requirements.txt", "pyproject.toml", "README.md", "LICENSE")]
+    files += sorted((root / "controller" / "static").glob("*.html"))
+    files += [root / name for name in ("requirements.txt", "pyproject.toml", "README.md")]
+    if (root / "LICENSE").is_file():
+        files.append(root / "LICENSE")
+    for source in files:
+        if not source.is_file():
+            raise FileNotFoundError(source)
     with ZipFile(destination, "w", ZIP_DEFLATED) as bundle:
         for source in files:
             bundle.write(source, source.relative_to(root).as_posix())
