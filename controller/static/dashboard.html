@@ -6,6 +6,7 @@
 <style>
 :root{color-scheme:dark;--bg:#090e18;--panel:#111a29;--border:#253248;--muted:#9aaac2;--text:#e7edf6;--green:#62e3aa;--blue:#6aafff;--red:#ff8391;--gray:#a0acbd}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 85% 0,#172944 0,transparent 48%),var(--bg);color:var(--text);font:15px/1.55 system-ui,sans-serif}main{max-width:1280px;margin:auto;padding:40px 28px 64px}header{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:36px}.eyebrow{color:var(--green);text-transform:uppercase;letter-spacing:.17em;font-size:11px;font-weight:700}h1{font-size:34px;letter-spacing:-1.2px;margin:4px 0}h2{font-size:20px;margin:0}p{margin:0;color:var(--muted)}.connection{border:1px solid var(--border);border-radius:24px;padding:9px 15px;color:var(--muted);font-size:12px}.connection.good{color:var(--green)}.connection.bad{color:var(--red)}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px}.stat,.card,.result{background:var(--panel);border:1px solid var(--border);border-radius:14px}.stat{padding:21px}.stat span{color:var(--muted);font-size:12px}.stat strong{display:block;font-size:32px;font-weight:600;margin-top:5px;font-variant-numeric:tabular-nums}.stat small{font-size:14px;color:var(--muted)}.types{color:var(--muted);font-size:13px;padding:0 2px 30px}.section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:16px}.section-head p{font-size:13px}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,350px),1fr));gap:18px}.card{padding:24px}.card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.worker-id{font:600 16px ui-monospace,monospace;overflow-wrap:anywhere}.badge{font-size:10px;font-weight:700;letter-spacing:.06em;border-radius:5px;padding:4px 7px;background:#20312c;color:var(--green);white-space:nowrap}.badge.busy{background:#1d324d;color:var(--blue)}.badge.error{background:#3d242e;color:var(--red)}.badge.offline{background:#29303b;color:var(--gray)}.gpu-name{font-size:23px;margin:18px 0 4px;font-weight:600}.meta{font-size:12px;color:var(--muted);margin-bottom:24px}.metric{margin-top:18px}.metric-label{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--muted);margin-bottom:8px}.metric-label strong{color:var(--text);font-weight:500}progress{display:block;width:100%;height:7px;border:0;border-radius:8px;overflow:hidden;background:#263348;accent-color:var(--blue)}progress::-webkit-progress-bar{background:#263348}progress::-webkit-progress-value{background:var(--blue);border-radius:8px}progress.unknown{opacity:.25}dl{display:grid;grid-template-columns:110px 1fr;gap:9px;font-size:12px;margin:24px 0}dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}.execution{border-top:1px solid var(--border);padding-top:18px;margin-top:20px;display:flex;justify-content:space-between;align-items:center;gap:12px}.execution span{font-size:12px;color:var(--muted)}button{border:1px solid #4876ae;border-radius:7px;background:#203e65;color:#dcecff;padding:10px 15px;font:600 12px system-ui;cursor:pointer}button:hover:enabled{background:#2b507e}button:disabled{opacity:.45;cursor:not-allowed}button:focus-visible{outline:2px solid var(--green);outline-offset:3px}.empty{padding:48px 20px;text-align:center;border:1px dashed var(--border);border-radius:14px;color:var(--muted)}.empty strong{display:block;color:var(--text);margin-bottom:8px}.notice{padding:12px 16px;border:1px solid #684451;border-radius:8px;color:var(--red);margin-bottom:20px}.result{padding:24px;margin-top:24px}.result h2{color:var(--green);font-size:17px}.result.failed h2{color:var(--red)}.result.running h2{color:var(--blue)}.result dl{grid-template-columns:minmax(135px,180px) 1fr;margin-bottom:14px}.result p{font-size:13px}.result[hidden],.notice[hidden],.empty[hidden]{display:none}footer{margin-top:30px;color:var(--muted);font-size:12px}.mono{font-family:ui-monospace,monospace}@media(max-width:640px){main{padding:25px 16px}header{align-items:flex-start;flex-direction:column;gap:15px}.stats{grid-template-columns:repeat(2,1fr)}.stat{padding:16px}.section-head{align-items:flex-start;flex-direction:column}.card{padding:19px}}
+.diagnostic-buttons{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.execution{flex-wrap:wrap}
 </style>
 </head>
 <body><main>
@@ -20,18 +21,18 @@
 <section aria-label="Active workers"><div class="section-head"><h2>Active workers</h2><p>Live telemetry · refreshes every 2.5 seconds</p></div>
 <div id="empty" class="empty"><strong>Waiting for controller data</strong>Registered workers will appear here.</div><div id="cards" class="cards"></div></section>
 <section id="result" class="result" aria-live="polite" hidden><h2 id="result-title"></h2><dl id="result-fields"></dl><p id="result-message"></p></section>
-<footer>GPU Execution · Fixed SmallMLP diagnostic only. One click runs one test. No training, downloads, or scheduled jobs. Memory values are reported by the worker.</footer>
+<footer>GPU Execution · Fixed SmallMLP and SmallCNN diagnostics only. One click runs one test. No training, downloads, or scheduled jobs. Memory values are reported by the worker.</footer>
 </main>
 <template id="card-template"><article class="card"><div class="card-top"><div class="worker-id"></div><span class="badge"></span></div><div class="gpu-name"></div><div class="meta"></div>
 <div class="metric"><div class="metric-label"><span>GPU utilization</span><strong class="util-label"></strong></div><progress class="util-bar" max="100" aria-label="GPU utilization"></progress></div>
 <div class="metric"><div class="metric-label"><span>VRAM used / capacity</span><strong class="vram-label"></strong></div><progress class="vram-bar" max="100" aria-label="VRAM utilization"></progress></div>
 <dl><dt>CUDA available</dt><dd class="cuda"></dd><dt>Status</dt><dd class="status"></dd><dt>Last heartbeat</dt><dd class="heartbeat"></dd><dt>Diagnostic URL</dt><dd class="diagnostic mono"></dd></dl>
-<div class="execution"><span>GPU Execution</span><button type="button">Run NN Test</button></div></article></template>
+<div class="execution"><span>GPU Execution</span><div class="diagnostic-buttons"><button type="button" data-kind="nn">Run NN Test</button><button type="button" data-kind="cnn">Run CNN Test</button></div></div></article></template>
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
 const cards = new Map();
-let workers = [], healthy = false, pending = null;
+let workers = [], healthy = false, pending = null, pendingKind = null;
 const fmt = (value, digits = 2) => typeof value === 'number' && Number.isFinite(value) ? value.toFixed(digits) : 'Unavailable';
 const text = (root, selector, value) => { root.querySelector(selector).textContent = value; };
 async function jsonRequest(path, options = {}, timeout = 8000) {
@@ -55,7 +56,7 @@ function renderWorkers() {
     let card = cards.get(worker.worker_id);
     if (!card) {
       card = $('card-template').content.firstElementChild.cloneNode(true);
-      card.querySelector('button').addEventListener('click', () => runTest(worker.worker_id));
+      for (const button of card.querySelectorAll('button')) button.addEventListener('click', () => runTest(worker.worker_id, button.dataset.kind));
       cards.set(worker.worker_id, card); $('cards').append(card);
     }
     const meta = worker.metadata || {};
@@ -78,10 +79,13 @@ function renderWorkers() {
     text(card,'.heartbeat',age == null ? 'Unavailable' : `${age} sec ago`);
     card.querySelector('.heartbeat').title = worker.last_seen || '';
     text(card,'.diagnostic',meta.diagnostic_url || 'Not configured');
-    const button = card.querySelector('button');
-    button.disabled = !healthy || pending !== null || worker.status !== 'ready' || !worker.cuda_available || !meta.diagnostic_url;
-    button.textContent = pending === worker.worker_id ? 'GPU TEST RUNNING' : 'Run NN Test';
-    button.title = 'Requires a ready CUDA worker with a reachable diagnostic URL';
+    for (const button of card.querySelectorAll('button')) {
+      button.disabled = !healthy || pending !== null || worker.status !== 'ready' || !worker.cuda_available || !meta.diagnostic_url;
+      const isCnn = button.dataset.kind === 'cnn';
+      button.textContent = pending === worker.worker_id && pendingKind === button.dataset.kind
+        ? (isCnn ? 'CNN TEST RUNNING' : 'GPU TEST RUNNING') : (isCnn ? 'Run CNN Test' : 'Run NN Test');
+      button.title = 'Requires a ready CUDA worker with a reachable diagnostic URL';
+    }
   }
 }
 async function poll() {
@@ -101,24 +105,34 @@ async function poll() {
   }
   renderWorkers(); setTimeout(poll,2500);
 }
-async function runTest(id) {
+async function runTest(id, kind = 'nn') {
   if (pending !== null || !healthy) return;
-  pending = id; renderWorkers();
+  if (!['nn','cnn'].includes(kind)) return;
+  const isCnn = kind === 'cnn', label = isCnn ? 'CNN' : 'NN', modelName = isCnn ? 'SmallCNN' : 'SmallMLP';
+  pending = id; pendingKind = kind; renderWorkers();
   $('result').hidden = false; $('result').className = 'result running';
-  $('result-title').textContent = 'GPU TEST RUNNING'; $('result-fields').replaceChildren();
-  $('result-message').textContent = `Running the fixed SmallMLP on ${id}. No automatic retries.`;
+  $('result-title').textContent = isCnn ? 'CNN TEST RUNNING' : 'GPU TEST RUNNING'; $('result-fields').replaceChildren();
+  $('result-message').textContent = `Running the fixed ${modelName} on ${id}. No automatic retries.`;
+  if (isCnn) {
+    const selected = workers.find(worker => worker.worker_id === id);
+    for (const [name,value] of [['Worker',id],['GPU',selected?.gpu ?? 'Unavailable'],['Model','SmallCNN'],['Device','cuda:0 (requested)'],['Batch',32],['Input shape','[32, 3, 32, 32]'],['Forward passes',100]]) {
+      const dt = document.createElement('dt'), dd = document.createElement('dd'); dt.textContent = name; dd.textContent = value; $('result-fields').append(dt,dd);
+    }
+  }
   try {
-    const result = await jsonRequest(`/workers/${encodeURIComponent(id)}/nn-test`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'},130000);
-    if (result.status !== 'passed' || result.device !== 'cuda:0' || result.worker_id !== id) throw new Error('Unexpected diagnostic result');
-    $('result').className = 'result'; $('result-title').textContent = 'NN TEST PASSED';
+    const result = await jsonRequest(`/workers/${encodeURIComponent(id)}/${kind}-test`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'},130000);
+    if (result.status !== 'passed' || result.device !== 'cuda:0' || result.worker_id !== id || result.model !== modelName) throw new Error('Unexpected diagnostic result');
+    $('result').className = 'result'; $('result-title').textContent = `${label} TEST PASSED`;
+    $('result-fields').replaceChildren();
     const fields = [['Worker',result.worker_id],['GPU',result.gpu],['CUDA / PyTorch',`${result.cuda_version} / ${result.torch_version}`],['Device',result.device],['Model',result.model],['Input shape',JSON.stringify(result.input_shape)],['Batch',result.batch_size],['Forward passes',result.forward_passes],['Total GPU time',`${fmt(result.total_gpu_time_ms,3)} ms`],['Average inference',`${fmt(result.average_inference_ms,3)} ms`],['Peak VRAM',`${fmt(result.peak_memory_mb)} MiB`],['Output shape',JSON.stringify(result.output_shape)]];
+    if (isCnn) fields.splice(fields.length - 2, 0, ['Throughput',`${fmt(result.throughput_images_per_second)} images/sec`]);
     for (const [label,value] of fields) {
       const dt = document.createElement('dt'), dd = document.createElement('dd'); dt.textContent = label; dd.textContent = value; $('result-fields').append(dt,dd);
     }
-    $('result-message').textContent = '\u2713 CUDA execution confirmed. Compute timing excludes HTTP and tunnel latency.';
+    $('result-message').textContent = isCnn ? '\u2713 CUDA CNN execution confirmed. Compute timing excludes HTTP and tunnel latency.' : '\u2713 CUDA execution confirmed. Compute timing excludes HTTP and tunnel latency.';
   } catch (error) {
-    $('result').className = 'result failed'; $('result-title').textContent = 'NN TEST FAILED'; $('result-message').textContent = error.message;
-  } finally { pending = null; renderWorkers(); }
+    $('result').className = 'result failed'; $('result-title').textContent = `${label} TEST FAILED`; $('result-message').textContent = error.message;
+  } finally { pending = null; pendingKind = null; renderWorkers(); }
 }
 poll();
 </script></body></html>

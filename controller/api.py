@@ -5,6 +5,8 @@ from pathlib import Path
 from fastapi.responses import FileResponse
 from common.schemas import NnTestRequest, NnTestResponse
 from controller.nn_test import forward_nn_test
+from controller.cnn_test import forward_cnn_test
+from common.schemas import CnnTestRequest, CnnTestResponse
 from controller.registry import WorkerNotReadyError
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -111,5 +113,20 @@ def nn_test(worker_id: str, payload: NnTestRequest, request: Request, registry: 
         raise HTTPException(409, "Worker is not ready for an NN diagnostic") from None
     try:
         return forward_nn_test(worker)
+    finally:
+        registry.finish_nn_test(worker_id, original)
+
+
+@router.post("/workers/{worker_id}/cnn-test", response_model=CnnTestResponse)
+def cnn_test(worker_id: str, payload: CnnTestRequest, request: Request, registry: Registry) -> CnnTestResponse:
+    """Forward fixed SmallCNN inference using the existing diagnostic reservation."""
+    try:
+        worker, original = registry.begin_nn_test(worker_id, request.app.state.worker_timeout)
+    except UnknownWorkerError:
+        raise HTTPException(404, "Worker is not active") from None
+    except WorkerNotReadyError:
+        raise HTTPException(409, "Worker is not ready for a CNN diagnostic") from None
+    try:
+        return forward_cnn_test(worker)
     finally:
         registry.finish_nn_test(worker_id, original)

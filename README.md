@@ -553,3 +553,70 @@ No dashboard tooling or PyTorch is required on the controller for inference.
 Automated tests mock CUDA execution; the real T4 test is a manual integration
 check and its results must not be inferred from mocked tests. The existing
 development API/tunnel access model is unchanged; there is no new authentication.
+
+## Small CNN Remote Inference Test
+
+The fixed **SmallCNN** diagnostic runs inference on the selected remote CUDA
+worker. It uses synthetic float32 input `[32, 3, 32, 32]`, with no dataset download,
+training, optimizer, arbitrary code, or persistent model files. The architecture is:
+
+```text
+Conv2d(3,16,3,padding=1) -> ReLU -> MaxPool2d(2)
+Conv2d(16,32,3,padding=1) -> ReLU -> MaxPool2d(2)
+AdaptiveAvgPool2d((1,1)) -> Flatten -> Linear(32,10)
+```
+
+The result shape is `[32, 10]`. Model initialization uses a fixed seed with CPU
+random state restored afterward; synthetic input uses a private seeded CUDA
+generator. This makes inputs reproducible without reseeding unrelated worker
+random streams. GPU timing is not expected to be identical between runs.
+
+Inference uses `model.eval()` and `torch.no_grad()`, ten warmup passes, then 100
+timed passes. CUDA synchronization brackets the timed section, which excludes
+model construction, warmup, HTTP, and Cloudflare latency. Throughput is
+`32 * 100 / elapsed_seconds` images/sec. Peak allocated VRAM is sampled after
+resetting peak statistics just before timed inference. `peak_memory_mb` is in
+MiB (1024 squared bytes), and includes other live allocations in this process.
+Tensor/model references are released afterward; PyTorch may retain allocator cache.
+
+The existing diagnostic server on port 8001 now serves `/gpu-test`, `/nn-test`,
+and `/cnn-test`. All three use the same worker instance and lock. The CNN endpoint
+sets BUSY during execution and restores the previous state in `finally`, even on
+failure. There is no new port, server, tunnel, scheduler, or queue. The matrix and
+SmallMLP operations retain their existing behavior. CUDA/PyTorch absence returns
+an explicit error instead of silently running CPU inference.
+
+### Manual real T4 check
+
+1. Build `artifacts/colabcluster-worker.zip` with
+   `.\.venv\Scripts\python.exe scripts/build_colab_bundle.py`.
+2. Upload/extract that bundle in Colab. Restart the updated controller and worker,
+   keeping the existing controller/worker Cloudflare configuration. Re-register
+   the worker after a controller restart; verify `/workers` shows it as ready.
+3. Run this on Windows, replacing the ID if necessary:
+
+```powershell
+Invoke-RestMethod -Method Post `
+  -Uri "http://127.0.0.1:8000/workers/COLAB-GPU-TEST/cnn-test" `
+  -ContentType "application/json" `
+  -Body '{}' `
+  -TimeoutSec 135
+```
+
+Alternatively open **http://127.0.0.1:8000/dashboard**, find `COLAB-GPU-TEST`, and
+click **Run CNN Test**. The card shows BUSY and CNN TEST RUNNING; completion shows
+CNN TEST PASSED with GPU, CUDA/PyTorch versions, device, model, shapes, batch,
+100 passes, GPU time, mean inference latency, throughput, and peak VRAM.
+Verify Tesla T4, `cuda:0`, `SmallCNN`, output `[32, 10]`, and `status: passed`.
+The worker should return to READY. Each click runs only one diagnostic.
+
+The request body must be `{}`; custom architectures/parameters are rejected.
+Errors use the existing diagnostic conventions: 404 inactive worker, 409 not
+ready/missing URL/concurrent execution, 503 worker CUDA failure, 502 forwarding
+or invalid reply, and 504 timeout. Timeouts do not cancel CUDA work already
+running and requests are never automatically retried.
+
+Automated tests mock GPU operations and verify routing, shape, inference mode,
+status cleanup, and concurrency. They do **not** prove real T4 execution; perform
+the manual integration check above for that confirmation. This is a diagnostic,
+not a training benchmark.

@@ -181,3 +181,27 @@ class NnTestResponse(ProtocolModel):
     peak_memory_mb: float = Field(ge=0, allow_inf_nan=False)
     output_shape: tuple[Literal[128], Literal[10]]
     status: Literal["passed"]
+
+
+class CnnTestRequest(ProtocolModel):
+    """Empty request for the fixed SmallCNN diagnostic; no custom parameters."""
+
+
+class CnnTestResponse(ProtocolModel):
+    """Actual remote CUDA inference measurements for the predefined SmallCNN."""
+
+    worker_id: str = Field(min_length=1)
+    gpu: str = Field(min_length=1)
+    cuda_version: str
+    torch_version: str
+    device: Literal["cuda:0"]
+    model: Literal["SmallCNN"]
+    input_shape: tuple[Literal[32], Literal[3], Literal[32], Literal[32]]
+    batch_size: Literal[32]
+    forward_passes: Literal[100]
+    total_gpu_time_ms: float = Field(gt=0, allow_inf_nan=False)
+    average_inference_ms: float = Field(gt=0, allow_inf_nan=False)
+    throughput_images_per_second: float = Field(gt=0, allow_inf_nan=False)
+    peak_memory_mb: float = Field(ge=0, allow_inf_nan=False)
+    output_shape: tuple[Literal[32], Literal[10]]
+    status: Literal["passed"]
