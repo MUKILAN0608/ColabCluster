@@ -205,3 +205,36 @@ class CnnTestResponse(ProtocolModel):
     peak_memory_mb: float = Field(ge=0, allow_inf_nan=False)
     output_shape: tuple[Literal[32], Literal[10]]
     status: Literal["passed"]
+
+
+class InferenceBatchRequest(ProtocolModel):
+    """One of two fixed synthetic partitions; no tensors or executable input."""
+
+    partition: Literal[0, 1]
+
+
+class InferenceBatchResponse(CnnTestResponse):
+    """One timed forward over 32 distinct synthetic samples."""
+
+    partition: Literal[0, 1]
+    gpu: Literal["Tesla T4"]
+    cuda_available: Literal[True]
+    forward_passes: Literal[1]
+
+
+class TwoWorkerRequest(ProtocolModel):
+    """Select the fixed pair explicitly, with defaults for the verified setup."""
+
+    worker_ids: tuple[Literal["COLAB-GPU-TEST"], Literal["COLAB-GPU-TEST-2"]] = (
+        "COLAB-GPU-TEST", "COLAB-GPU-TEST-2")
+
+
+class TwoWorkerResponse(ProtocolModel):
+    status: Literal["passed"] = "passed"
+    worker_count: Literal[2] = 2
+    total_samples: Literal[64] = 64
+    workers: tuple[InferenceBatchResponse, InferenceBatchResponse]
+    parallel_wall_time_ms: float = Field(gt=0, allow_inf_nan=False)
+    sum_worker_gpu_time_ms: float = Field(gt=0, allow_inf_nan=False)
+    effective_throughput_images_per_second: float = Field(gt=0, allow_inf_nan=False)
+    output_shapes: tuple[tuple[Literal[32], Literal[10]], tuple[Literal[32], Literal[10]]]

@@ -27,6 +27,7 @@ class WorkerRegistry:
     def __init__(self) -> None:
         self._workers: dict[str, WorkerInfo] = {}
         self._lock = Lock()
+        self._inference_reservations: dict[str, WorkerInfo] = {}
 
     def register_worker(self, registration: WorkerRegistration) -> WorkerInfo:
         """Register a unique worker with controller-generated timestamps."""
@@ -71,7 +72,7 @@ class WorkerRegistry:
         with self._lock:
             worker = self._require_worker(worker_id)
             worker.last_seen = datetime.now(timezone.utc)
-            if status is not None:
+            if status is not None and self._inference_reservations.get(worker_id) is not worker:
                 worker.status = status
             worker.gpu_utilization = gpu_utilization
             worker.gpu_memory_used = gpu_memory_used
@@ -126,5 +127,23 @@ class WorkerRegistry:
         """Restore only the same registration, never recreate an expired record."""
         with self._lock:
             current = self._workers.get(worker_id)
+            if self._inference_reservations.get(worker_id) is original:
+                del self._inference_reservations[worker_id]
             if current is original and current.status == WorkerStatus.BUSY:
                 current.status = WorkerStatus.READY
+
+
+    def begin_two_worker_inference(
+        self, worker_ids: tuple[str, str], timeout: float,
+    ) -> list[tuple[WorkerInfo, WorkerInfo]]:
+        """Reserve both records atomically, or leave both untouched."""
+        with self._lock:
+            self._expire_locked(timeout, datetime.now(timezone.utc))
+            workers = [self._require_worker(identifier) for identifier in worker_ids]
+            for worker in workers:
+                if worker.status != WorkerStatus.READY:
+                    raise WorkerNotReadyError(worker.worker_id)
+            for worker in workers:
+                worker.status = WorkerStatus.BUSY
+                self._inference_reservations[worker.worker_id] = worker
+            return [(worker.model_copy(deep=True), worker) for worker in workers]

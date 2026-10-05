@@ -689,3 +689,66 @@ Automated two-worker integration tests use independent in-process diagnostic
 apps with simulated GPU results. They verify routing, metadata, heartbeat,
 status and removal isolation. They do not establish real two-T4 execution;
 that requires two actual Colab runtimes and the manual checks above.
+
+
+## Two-Worker Parallel Inference
+
+`POST /inference/two-worker` with `{}` runs one fixed 64-sample synthetic
+SmallCNN workload on `COLAB-GPU-TEST` and `COLAB-GPU-TEST-2`. Both must be
+active, READY Tesla T4 CUDA workers with separate diagnostic URLs. Optional
+`worker_ids` must contain exactly those IDs in that order; other workloads,
+IDs, tensors and executable code are rejected.
+
+The controller atomically reserves both workers and concurrently sends
+`{"partition": 0}` and `{"partition": 1}` to their new `POST /inference`
+endpoints. Each generates 32 float32 samples `[32,3,32,32]` locally, using
+private CUDA seeds 1000 and 1001 respectively. The existing SmallCNN builder
+uses seed 0 for identical initial weights, restoring the CPU RNG afterward.
+These are untrained synthetic diagnostics, not meaningful classifications.
+No tensors cross the network. Ten warmups precede one timed forward per worker;
+warmups are excluded from GPU time and sample counts. Both outputs are `[32,10]`.
+The response collects validated per-worker metrics and shapes, not prediction tensors.
+
+`parallel_wall_time_ms` spans concurrent dispatch through both completed
+responses, including HTTP/tunnels, model construction, warmup, and controller
+overhead. `sum_worker_gpu_time_ms` sums the synchronized timed forwards.
+`effective_throughput_images_per_second` is **64 / wall seconds**. Per-worker
+throughput is **32 / GPU seconds**. These are different measurements; no speedup
+is claimed without a comparable sequential baseline.
+
+Each worker has its own GPU and VRAM; they are not merged into one physical
+GPU. This experiment is a precursor to broader execution/scheduling, but adds
+no scheduler, queue, training, DDP, parameter synchronization or worker-to-worker
+networking. Existing matrix, MLP and CNN diagnostic APIs are unchanged.
+
+### Run the real experiment manually
+
+1. Upload/extract the refreshed `artifacts/colabcluster-worker.zip` in **both**
+   Colab runtimes. Stop old worker processes normally before replacing files.
+2. Restart the controller with the updated code (stop its existing process first,
+   so port 8000 is free). Keep the existing tunnel configuration.
+3. Start each updated worker with its existing distinct ID and diagnostic URL:
+   `python -u -m worker.colab_worker`. Both must re-register after controller restart.
+4. Verify both workers are READY in `/workers`. Open `/dashboard` and click
+   **Run 2-Worker Inference**, or run this in Windows PowerShell:
+
+```powershell
+Invoke-RestMethod -Method Post `
+  -Uri "http://127.0.0.1:8000/inference/two-worker" `
+  -ContentType "application/json" -Body '{}' -TimeoutSec 145 |
+  ConvertTo-Json -Depth 8
+```
+
+Expect status `passed`, two correctly identified Tesla T4 results on `cuda:0`,
+partitions 0 and 1, total_samples 64, and output_shapes `[[32,10],[32,10]]`.
+Then verify both workers return to READY. Do not interpret mocked tests as real
+GPU execution; this new experiment still requires this manual two-T4 check.
+
+Missing/expired workers return 404; busy workers or invalid hardware/URLs return
+409 without queuing. Failed/malformed replies return 502 (worker CUDA failures
+503), and transport timeouts return 504. Failure of either worker fails the
+whole experiment. Both bounded requests finish before controller reservations
+are released; deleted/replaced registrations are never resurrected. Heartbeats
+continue during execution. A timeout does not cancel remote CUDA work; the
+worker's shared diagnostic lock prevents overlapping local diagnostics until
+that work ends. There are no automatic execution retries.

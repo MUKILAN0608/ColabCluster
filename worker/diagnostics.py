@@ -1,6 +1,8 @@
 """Opt-in HTTP endpoint for one fixed GPU diagnostic, not arbitrary tasks."""
 
 from threading import Lock
+from common.schemas import InferenceBatchRequest, InferenceBatchResponse
+from worker.inference import run_inference
 
 from fastapi import FastAPI, HTTPException
 
@@ -61,6 +63,22 @@ def create_diagnostic_app(worker: Worker) -> FastAPI:
                 raise HTTPException(409, "Worker is not ready for a GPU diagnostic")
             worker.status = WorkerStatus.BUSY
             return run_cnn_test(worker.worker_id)
+        except CnnTestError as exc:
+            raise HTTPException(503, str(exc)) from exc
+        finally:
+            worker.status = previous
+            lock.release()
+
+    @app.post("/inference", response_model=InferenceBatchResponse)
+    def inference(payload: InferenceBatchRequest) -> InferenceBatchResponse:
+        if not lock.acquire(blocking=False):
+            raise HTTPException(409, "A GPU diagnostic is already running")
+        previous = worker.status
+        try:
+            if previous != WorkerStatus.READY:
+                raise HTTPException(409, "Worker is not ready")
+            worker.status = WorkerStatus.BUSY
+            return run_inference(worker.worker_id, payload.partition)
         except CnnTestError as exc:
             raise HTTPException(503, str(exc)) from exc
         finally:

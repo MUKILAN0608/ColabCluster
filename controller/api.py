@@ -1,5 +1,7 @@
 """Validated HTTP routes for the local controller."""
 
+from common.schemas import TwoWorkerRequest, TwoWorkerResponse
+from controller.inference import run_two_worker
 from typing import Annotated
 from pathlib import Path
 from fastapi.responses import FileResponse
@@ -130,3 +132,9 @@ def cnn_test(worker_id: str, payload: CnnTestRequest, request: Request, registry
         return forward_cnn_test(worker)
     finally:
         registry.finish_nn_test(worker_id, original)
+
+
+@router.post("/inference/two-worker", response_model=TwoWorkerResponse)
+def two_worker_inference(payload: TwoWorkerRequest, request: Request, registry: Registry):
+    """Execute the fixed 64-sample workload across the two named T4 workers."""
+    return run_two_worker(registry, payload.worker_ids, request.app.state.worker_timeout)

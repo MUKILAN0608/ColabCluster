@@ -20,6 +20,7 @@
 </section><div id="types" class="types">Waiting for GPU inventory...</div>
 <section aria-label="Active workers"><div class="section-head"><h2>Active workers</h2><p>Live telemetry · refreshes every 2.5 seconds</p></div>
 <div id="empty" class="empty"><strong>Waiting for controller data</strong>Registered workers will appear here.</div><div id="cards" class="cards"></div></section>
+<p style="margin-top:20px"><button id="two-worker" disabled>Run 2-Worker Inference</button></p>
 <section id="result" class="result" aria-live="polite" hidden><h2 id="result-title"></h2><dl id="result-fields"></dl><p id="result-message"></p></section>
 <footer>GPU Execution · Fixed SmallMLP and SmallCNN diagnostics only. One click runs one test. No training, downloads, or scheduled jobs. Memory values are reported by the worker.</footer>
 </main>
@@ -47,7 +48,9 @@ async function jsonRequest(path, options = {}, timeout = 8000) {
     throw error;
   } finally { clearTimeout(timer); }
 }
+const pairIds = ['COLAB-GPU-TEST', 'COLAB-GPU-TEST-2'];
 function renderWorkers() {
+  $('two-worker').disabled = !healthy || pending !== null || !pairIds.every(id => workers.some(w => w.worker_id === id && w.status === 'ready' && w.gpu === 'Tesla T4' && w.cuda_available && w.metadata?.diagnostic_url));
   const activeIds = new Set(workers.map(worker => worker.worker_id));
   for (const [id, card] of cards) if (!activeIds.has(id)) { card.remove(); cards.delete(id); }
   $('empty').hidden = workers.length > 0;
@@ -60,7 +63,7 @@ function renderWorkers() {
       cards.set(worker.worker_id, card); $('cards').append(card);
     }
     const meta = worker.metadata || {};
-    const state = !healthy ? 'offline' : pending === worker.worker_id ? 'busy' : worker.status;
+    const state = !healthy ? 'offline' : (pending === worker.worker_id || pendingKind === 'pair' && pairIds.includes(worker.worker_id)) ? 'busy' : worker.status;
     const badge = card.querySelector('.badge');
     badge.className = 'badge ' + (['ready','busy','error','offline'].includes(state) ? state : 'offline');
     badge.textContent = !healthy ? '\u25cf STALE DATA' : state === 'offline' ? '\u25cf OFFLINE' : '\u25cf ONLINE';
@@ -134,5 +137,26 @@ async function runTest(id, kind = 'nn') {
     $('result').className = 'result failed'; $('result-title').textContent = `${label} TEST FAILED`; $('result-message').textContent = error.message;
   } finally { pending = null; pendingKind = null; renderWorkers(); }
 }
+$('two-worker').addEventListener('click', async () => {
+  if ($('two-worker').disabled) return;
+  pending = 'two-worker'; pendingKind = 'pair'; renderWorkers();
+  $('result').hidden = false; $('result').className = 'result running';
+  $('result-title').textContent = '2-WORKER INFERENCE RUNNING';
+  $('result-fields').replaceChildren();
+  $('result-message').textContent = '64 samples split into two independent 32-sample batches.';
+  try {
+    const result = await jsonRequest('/inference/two-worker', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'}, 140000);
+    if (result.status !== 'passed' || result.workers?.length !== 2 || !result.workers.every((w,i) => w.worker_id === pairIds[i])) throw new Error('Unexpected two-worker result');
+    $('result').className = 'result'; $('result-title').textContent = '2-WORKER INFERENCE PASSED';
+    const fields = [['Total samples',result.total_samples], ['Worker #1',result.workers[0].worker_id], ['Worker #2',result.workers[1].worker_id], ['Parallel wall time',`${fmt(result.parallel_wall_time_ms,3)} ms`], ['Effective throughput',`${fmt(result.effective_throughput_images_per_second)} images/sec`], ['Output shapes',JSON.stringify(result.output_shapes)]];
+    for (const [label,value] of fields) {
+      const dt=document.createElement('dt'), dd=document.createElement('dd');
+      dt.textContent=label; dd.textContent=value; $('result-fields').append(dt,dd);
+    }
+    $('result-message').textContent = 'Wall time includes network and controller overhead. GPUs and VRAM remain independent.';
+  } catch (error) {
+    $('result').className='result failed'; $('result-title').textContent='2-WORKER INFERENCE FAILED'; $('result-message').textContent=error.message;
+  } finally { pending=null; pendingKind=null; renderWorkers(); }
+});
 poll();
 </script></body></html>
