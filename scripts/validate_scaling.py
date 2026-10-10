@@ -51,8 +51,16 @@ def preflight(url, sizes):
         definitions = schema.get("components",{}).get("schemas",{})
         name = "ScalingRequest" if index == 0 else "ScalingBatchRequest"
         allowed = definitions.get(name,{}).get("properties",{}).get("total_samples",{}).get("enum",[])
-        if not set(sizes).issubset(allowed):
-            raise ValueError(f"{'Controller' if index==0 else WORKER_IDS[index-1]} has outdated workload validation; restart with the current bundle")
+        advertised = allowed if isinstance(allowed, list) and all(type(n) is int for n in allowed) else []
+        missing = sorted(set(sizes) - set(advertised))
+        if missing:
+            component = "Controller" if index == 0 else WORKER_IDS[index-1]
+            action = ("Stop the existing controller and restart it from the updated project directory."
+                      if index == 0 else "Upload the current worker bundle and restart this Colab worker.")
+            raise ValueError(
+                f"{component} has outdated workload validation: advertised={advertised}; "
+                f"missing={missing}; schema={name}. {action} "
+                "The running process may still have an older schema loaded; editing files alone does not reload it.")
     return workers
 
 

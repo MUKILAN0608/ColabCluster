@@ -1,0 +1,9 @@
+samples,complete,speedup,wall_change_percent,throughput_change_percent,difference_ms,speedup_ci,difference_ci,paired_rounds,unpaired_rounds,ci_method
+256,False,,,,,,,0,0,unavailable
+512,False,,,,,,,0,0,unavailable
+768,False,,,,,,,0,0,unavailable
+1024,False,,,,,,,0,0,unavailable
+1536,False,,,,,,,0,0,unavailable
+2048,False,,,,,,,0,0,unavailable
+3072,False,,,,,,,0,0,unavailable
+4096,False,,,,,,,0,0,unavailable

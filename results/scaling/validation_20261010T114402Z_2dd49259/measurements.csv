@@ -1,0 +1,1 @@
+run,total_samples,worker_count,status,api_status,http_status,worker_ids,assigned_samples,gpu_models,client_wall_time_ms,server_wall_time_ms,gpu_inference_time_ms,worker_gpu_times_ms,effective_throughput_images_per_second,output_shapes,error,experiment_id,timestamp_utc,round,order,phase,seed,worker_versions
