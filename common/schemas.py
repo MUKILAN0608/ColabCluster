@@ -238,3 +238,24 @@ class TwoWorkerResponse(ProtocolModel):
     sum_worker_gpu_time_ms: float = Field(gt=0, allow_inf_nan=False)
     effective_throughput_images_per_second: float = Field(gt=0, allow_inf_nan=False)
     output_shapes: tuple[tuple[Literal[32], Literal[10]], tuple[Literal[32], Literal[10]]]
+
+
+class SingleWorkerRequest(ProtocolModel):
+    """Empty request: fixed workload and first READY worker, no selection options."""
+
+
+class SingleInferenceResponse(CnnTestResponse):
+    """The same inference configuration, with the entire workload in one batch."""
+
+    gpu: Literal["Tesla T4"]
+    cuda_available: Literal[True]
+    input_shape: tuple[Literal[64], Literal[3], Literal[32], Literal[32]]
+    batch_size: Literal[64]
+    forward_passes: Literal[1]
+    output_shape: tuple[Literal[64], Literal[10]]
+
+
+class SingleWorkerResponse(SingleInferenceResponse):
+    total_samples: Literal[64] = 64
+    wall_time_ms: float = Field(gt=0, allow_inf_nan=False)
+    effective_throughput_images_per_second: float = Field(gt=0, allow_inf_nan=False)

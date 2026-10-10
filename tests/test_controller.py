@@ -112,7 +112,7 @@ def test_docs(client):
     schema = client.get("/openapi.json").json()
     assert schema["info"]["title"] == "ColabCluster Controller"
     assert schema["info"]["version"] == "0.1.0"
-    assert len(schema["paths"]) == 10
+    assert len(schema["paths"]) == 11
 
 
 def test_app_instances_are_isolated(client, registration):

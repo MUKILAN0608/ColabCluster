@@ -6,7 +6,7 @@ import requests
 from fastapi import HTTPException
 from pydantic import HttpUrl, TypeAdapter, ValidationError
 
-from common.schemas import InferenceBatchResponse, TwoWorkerResponse
+from common.schemas import InferenceBatchResponse, TwoWorkerResponse, SingleInferenceResponse, SingleWorkerResponse
 from controller.registry import UnknownWorkerError, WorkerNotReadyError
 
 
@@ -22,10 +22,14 @@ def diagnostic_url(worker):
         raise HTTPException(409, f"{worker.worker_id} requires a Tesla T4, CUDA and valid diagnostic URL") from None
 
 
-def forward(worker, url, partition):
+def forward(worker, url, partition, *, single=False):
     try:
-        response = requests.post(url, json={"partition": partition},
-                                 timeout=(5, 120), allow_redirects=False)
+        payload = {} if single else {"partition": partition}
+        if single:
+            start = perf_counter()
+        response = requests.post(url, json=payload, timeout=(5, 120), allow_redirects=False)
+        if single:
+            elapsed = perf_counter() - start
     except requests.Timeout:
         raise HTTPException(504, f"{worker.worker_id} timed out; remote work may still be running") from None
     except requests.RequestException:
@@ -35,12 +39,18 @@ def forward(worker, url, partition):
             raise HTTPException(response.status_code if response.status_code in (409, 503) else 502,
                                 f"Inference failed on {worker.worker_id}")
         try:
-            result = InferenceBatchResponse.model_validate(response.json())
-            if (result.worker_id != worker.worker_id or result.partition != partition
+            response_type = SingleInferenceResponse if single else InferenceBatchResponse
+            result = response_type.model_validate(response.json())
+            if (result.worker_id != worker.worker_id or (not single and result.partition != partition)
                     or result.cuda_version in ("", "None") or not result.torch_version):
                 raise ValueError()
         except ValueError:
             raise HTTPException(502, f"Invalid inference result from {worker.worker_id}") from None
+        if single:
+            if elapsed <= 0:
+                raise HTTPException(502, "Wall-clock measurement was not positive")
+            return SingleWorkerResponse(**result.model_dump(), wall_time_ms=elapsed * 1000,
+                                        effective_throughput_images_per_second=64 / elapsed)
         return result
     finally:
         response.close()
@@ -72,3 +82,15 @@ def run_two_worker(registry, worker_ids, timeout):
         # Executor shutdown waits for both calls even when one fails.
         for worker, original in reserved:
             registry.finish_nn_test(worker.worker_id, original)
+
+
+def run_single_worker(registry, timeout):
+    try:
+        worker, original = registry.begin_single_worker_inference(timeout)
+    except WorkerNotReadyError:
+        raise HTTPException(409, "No READY workers available") from None
+    try:
+        url = diagnostic_url(worker) + "/single-worker"
+        return forward(worker, url, 0, single=True)
+    finally:
+        registry.finish_nn_test(worker.worker_id, original)

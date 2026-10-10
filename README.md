@@ -752,3 +752,54 @@ are released; deleted/replaced registrations are never resurrected. Heartbeats
 continue during execution. A timeout does not cancel remote CUDA work; the
 worker's shared diagnostic lock prevents overlapping local diagnostics until
 that work ends. There are no automatic execution retries.
+
+
+## Single-worker inference baseline
+
+`POST /inference/single-worker` with `{}` processes **64 samples on one READY
+worker**, providing a controlled baseline for the existing two-worker experiment
+(**32 + 32 samples**). There is no worker-selection or sample-count parameter.
+The registry selects and reserves the first active READY worker in worker-ID
+order, regardless of registration order. Selection and reservation are atomic.
+The same Tesla T4/CUDA/diagnostic-URL checks apply; an unsuitable first READY
+worker causes an error, rather than silently selecting another GPU.
+
+The controller sends one empty request to the selected worker's
+`POST /inference/single-worker`. The worker reuses the existing SmallCNN builder
+and inference loop, float32 on `cuda:0`, seed-0 model initialization, no gradients,
+ten warmups and one timed forward. It locally generates the same two 32-sample
+partitions (CUDA seeds 1000 and 1001), concatenating them into `[64,3,32,32]`
+before warmup. Output is `[64,10]`. No tensors are transferred over HTTP.
+The two-worker API, seeds, per-worker batch size and responses remain unchanged.
+
+`wall_time_ms` is measured immediately around the controller's blocking HTTP
+request, stopping when the response body arrives, before JSON/schema validation.
+It includes network/tunnel latency, remote model/input construction, warmup,
+inference and response transfer. GPU-only `total_gpu_time_ms` brackets one
+CUDA-synchronized forward, excluding setup and warmup. Effective end-to-end
+throughput is **64 / (wall_time_ms / 1000)**; worker GPU throughput is reported
+separately. The existing parallel wall metric additionally includes thread-pool
+and result-validation overhead, so small timing differences must not be treated
+as proof of compute speedup. No speedup or two-GPU advantage is claimed yet.
+
+Re-upload the rebuilt worker bundle and restart the updated controller and
+workers before manually using this endpoint. Controller restart requires worker
+re-registration. Keep the current tunnel/ID configuration. The dashboard now
+has **Run 1-Worker Inference** beside **Run 2-Worker Inference**, with selected
+worker, GPU, sample count, wall time, GPU time and effective throughput.
+
+```powershell
+Invoke-RestMethod -Method Post `
+  -Uri "http://127.0.0.1:8000/inference/single-worker" `
+  -ContentType "application/json" -Body '{}' -TimeoutSec 145 |
+  ConvertTo-Json -Depth 8
+```
+
+No READY worker returns 409. Remote errors follow the existing 409/502/503/504
+conventions. Selected workers transition READY -> BUSY -> READY, including
+failure cleanup; removed/replaced records are not recreated. Incoming READY
+heartbeats cannot erase an active reservation. The existing worker diagnostic
+lock prevents overlapping local work. As before, HTTP timeout does not cancel
+remote CUDA work. No retries, queues, scheduler or training were added.
+Automated tests use mocked GPU/network execution; the real baseline and its
+10-run benchmark have not been executed as part of this implementation.

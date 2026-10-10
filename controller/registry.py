@@ -147,3 +147,16 @@ class WorkerRegistry:
                 worker.status = WorkerStatus.BUSY
                 self._inference_reservations[worker.worker_id] = worker
             return [(worker.model_copy(deep=True), worker) for worker in workers]
+
+
+    def begin_single_worker_inference(self, timeout: float) -> tuple[WorkerInfo, WorkerInfo]:
+        """Select and reserve the first READY record in the usual ID order."""
+        with self._lock:
+            self._expire_locked(timeout, datetime.now(timezone.utc))
+            worker = next((w for w in sorted(self._workers.values(), key=lambda w: w.worker_id)
+                           if w.status == WorkerStatus.READY), None)
+            if worker is None:
+                raise WorkerNotReadyError("No READY workers available")
+            worker.status = WorkerStatus.BUSY
+            self._inference_reservations[worker.worker_id] = worker
+            return worker.model_copy(deep=True), worker
