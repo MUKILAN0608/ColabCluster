@@ -4,6 +4,7 @@ from pydantic import Field, model_validator
 from common.schemas import ProtocolModel, SingleInferenceResponse
 
 SIZES = (64, 256, 1024, 4096)
+VALIDATION_SIZES = (256, 512, 768, 1024, 1536, 2048, 3072, 4096)
 WORKER_IDS = ("COLAB-GPU-TEST", "COLAB-GPU-TEST-2")
 
 
@@ -16,7 +17,7 @@ def partition_samples(total: int, count: int) -> list[int]:
 
 
 class ScalingRequest(ProtocolModel):
-    total_samples: Literal[64, 256, 1024, 4096]
+    total_samples: Literal[64, 256, 512, 768, 1024, 1536, 2048, 3072, 4096]
     worker_count: Literal[1, 2]
 
 

@@ -1,0 +1,19 @@
+{
+  "results\\benchmark_comparison.md": "74fdcc025e9863b882517923081b3c2df73ce4c54670254bd21a7b2c3d0ec154",
+  "results\\single_worker_benchmark.csv": "4bd058f083948b0b087dadae906f91bb62e29a2c3da6748462fea218e9272d48",
+  "results\\test_report_till_step_8_5.txt": "66bec1089aa2983b9ce982b116e0e98cc8d808a8e1b93b8f0d3ed801ea960a15",
+  "results\\two_worker_benchmark.csv": "a57d6a7bf2f2ca193fdc047f8f9ceefec11465339f2e33a269c0d4fc7be226f3",
+  "results\\scaling\\scaling_report.md": "5dd0463a5af8ad63c5393a5af5f182560820a6cde79ecb396cc8e73cf2039d8c",
+  "results\\scaling\\20261010T064128Z-c79e2764\\measurements.csv": "b3f96f53593125edaa03c0377fd59f62a391814aff4776f6b7e4d00023d9b9a7",
+  "results\\scaling\\20261010T064128Z-c79e2764\\metadata.json": "5efce3ddb98e08d2bbcd869f4e589721e1eda43e7419c55025e40c3419fe95fe",
+  "results\\scaling\\20261010T064128Z-c79e2764\\scaling_report.md": "4f0be070b80e3c76bc6e460df77d471fa6b258d7b38b09f45cb65f2ebee7e675",
+  "results\\scaling\\20261010T064218Z-ee9d6974\\measurements.csv": "b3f96f53593125edaa03c0377fd59f62a391814aff4776f6b7e4d00023d9b9a7",
+  "results\\scaling\\20261010T064218Z-ee9d6974\\metadata.json": "5efce3ddb98e08d2bbcd869f4e589721e1eda43e7419c55025e40c3419fe95fe",
+  "results\\scaling\\20261010T064218Z-ee9d6974\\scaling_report.md": "532128b174526b6c96a986f4c78ae93d9e8fafd434edcab0a212736a57c022c3",
+  "results\\scaling\\20261010T064425Z-4f073490\\measurements.csv": "b3f96f53593125edaa03c0377fd59f62a391814aff4776f6b7e4d00023d9b9a7",
+  "results\\scaling\\20261010T064425Z-4f073490\\metadata.json": "5efce3ddb98e08d2bbcd869f4e589721e1eda43e7419c55025e40c3419fe95fe",
+  "results\\scaling\\20261010T064425Z-4f073490\\scaling_report.md": "e6b370f0268fa8d8b84520816975544572f43e55b1f63916dac722f9db1b4360",
+  "results\\scaling\\20261010T093440Z-b49f5e6d\\measurements.csv": "64a28b9d7ad1de2cdceac59f23c914fc7774ee1ef97a32e5d2f169c25a5c3c1b",
+  "results\\scaling\\20261010T093440Z-b49f5e6d\\metadata.json": "bc61b7d37e56a8fdf184f2ca4cfb9488f67219b1bfae4f7d769740d383c342a3",
+  "results\\scaling\\20261010T093440Z-b49f5e6d\\scaling_report.md": "5dd0463a5af8ad63c5393a5af5f182560820a6cde79ecb396cc8e73cf2039d8c"
+}

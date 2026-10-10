@@ -1,0 +1,60 @@
+{
+  "experiment_id": "validation_20261010T113208Z_19ec2613",
+  "created_utc": "2026-10-10T11:32:08.451977+00:00",
+  "method": {
+    "model": "SmallCNN",
+    "model_seed": 0,
+    "input_seed_base": 1000,
+    "input_block_samples": 32,
+    "dtype": "float32",
+    "device": "cuda:0",
+    "warmups": 10,
+    "timed_forwards": 1,
+    "timing": "client perf_counter complete HTTP body before JSON parsing",
+    "order": "seeded balanced alternating rounds",
+    "protocol": "scaling-validation-v1"
+  },
+  "seed": 20261010,
+  "targets": {
+    "256": 5,
+    "512": 5,
+    "768": 5,
+    "1024": 20,
+    "1536": 5,
+    "2048": 5,
+    "3072": 5,
+    "4096": 20
+  },
+  "timeout_seconds": 135.0,
+  "attempt_multiplier": 2,
+  "software": {
+    "python": "3.14.3",
+    "git_commit": "579bdfef5e4dd38e4b409b663acb7701ca26ba48",
+    "packages": {
+      "requests": "2.34.2",
+      "pydantic": "2.13.5",
+      "matplotlib": "3.11.2"
+    },
+    "source_sha256": {
+      "common/scaling.py": "bd0717011d689d64cae8eed07df61fd1d89659b2ab31e65528dfd345ae0d8b14",
+      "worker/inference.py": "7d5abb426aa9852b3d180d718190d5bbb1ad17849432f3f5b657056876c9fcaf",
+      "worker/cnn_test.py": "3fbfebc251a939c06a26d9382c323224183960ff375b78cbd58266d7dc0feb12",
+      "controller/scaling.py": "72cc00162913cc7204cacf5efe0876d3e72d7382982011e989cce5350a1e6297",
+      "scripts/validate_scaling.py": "2d72485ef478b73db5aef01daf72f965ee463a1dd07cbd074b99df023825a36e",
+      "scripts/analyze_scaling_validation.py": "df9743289c04e6ca11da0122f3b80ee8a700f328f5e9a919d5fe07de2faf1818"
+    }
+  },
+  "stages": [
+    1024,
+    4096,
+    256,
+    512,
+    768,
+    1536,
+    2048,
+    3072
+  ],
+  "complete": false,
+  "stop_reason": "ValueError: Required worker COLAB-GPU-TEST is missing or not READY",
+  "workers": {}
+}

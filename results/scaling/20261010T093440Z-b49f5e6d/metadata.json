@@ -1,0 +1,47 @@
+{
+  "controller_url": "http://127.0.0.1:8000",
+  "trials": 5,
+  "timeout": 135,
+  "max_attempts_per_configuration": 10,
+  "workers": {
+    "COLAB-GPU-TEST": {
+      "worker_id": "COLAB-GPU-TEST",
+      "gpu": "Tesla T4",
+      "gpu_memory": 14.56317138671875,
+      "status": "ready",
+      "cpu_count": 2,
+      "ram_total": 12.671417236328125,
+      "cuda_available": true,
+      "metadata": {
+        "platform": "Linux",
+        "python_version": "3.13.15",
+        "torch_version": "2.11.0+cu130",
+        "diagnostic_url": "https://rail-pic-lou-amanda.trycloudflare.com"
+      },
+      "registered_at": "2026-10-10T09:30:11.296565Z",
+      "last_seen": "2026-10-10T09:34:31.267623Z",
+      "gpu_utilization": 0.0,
+      "gpu_memory_used": 0.1024169921875
+    },
+    "COLAB-GPU-TEST-2": {
+      "worker_id": "COLAB-GPU-TEST-2",
+      "gpu": "Tesla T4",
+      "gpu_memory": 14.56317138671875,
+      "status": "ready",
+      "cpu_count": 2,
+      "ram_total": 12.671417236328125,
+      "cuda_available": true,
+      "metadata": {
+        "platform": "Linux",
+        "python_version": "3.13.15",
+        "torch_version": "2.11.0+cu130",
+        "diagnostic_url": "https://curtis-nominated-disk-zone.trycloudflare.com"
+      },
+      "registered_at": "2026-10-10T09:32:22.774346Z",
+      "last_seen": "2026-10-10T09:34:36.053163Z",
+      "gpu_utilization": 0.0,
+      "gpu_memory_used": 0.1024169921875
+    }
+  },
+  "preflight_error": ""
+}

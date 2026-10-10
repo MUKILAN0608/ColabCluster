@@ -19,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest", "httpx"]
+benchmark = ["matplotlib>=3.9"]
 
 [tool.setuptools.packages.find]
 include = ["controller*", "common*", "worker*"]

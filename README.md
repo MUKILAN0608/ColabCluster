@@ -952,3 +952,93 @@ are removed. GPU time is summed compute, not parallel wall time; throughput is
 API-reported samples/server-wall-seconds. Small samples, ascending workload order,
 network latency and ephemeral Colab conditions limit generalization. No statistical
 significance or performance improvement is claimed without measured evidence.
+
+
+## Steps 8.6-8.8: Repeatability, crossover and automated analysis
+
+Install the optional plotting dependency in the controller environment (not in
+Colab merely for inference):
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[benchmark]"
+.\.venv\Scripts\python.exe scripts/build_colab_bundle.py
+```
+
+Upload the rebuilt worker bundle and restart both workers plus the updated
+controller, keeping the existing IDs/diagnostic tunnels. Worker re-registration
+is needed after controller restart. `/inference/scaling` now additionally accepts
+512, 768, 1536, 2048 and 3072 samples. The original 64-sample APIs, the old four-size
+benchmark defaults and the maximum 4096-sample batch remain unchanged. The added
+sizes require no larger batch than the already supported maximum. All sizes are
+multiples of 64, so partitions align with the existing 32-sample input blocks;
+odd totals remain rejected, while remainder allocation stays unit-tested.
+
+Run the full coordinated milestone:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/validate_scaling.py --trials 20 --exploratory-trials 5 --seed 20261010 --timeout 135
+```
+
+The default target is 140 successful requests: 20 each for one/two workers at
+1024 and 4096 (80 total), then five each at 256, 512, 768, 1536, 2048 and 3072
+(60 more). Within each size, requests alternate configurations and first position
+by round, with a seeded starting order. There are at most twice the target
+attempts per configuration (280 default maximum). No request-level retries run.
+Every attempt, including failures and interruption, is flushed to raw CSV.
+
+GET-only preflight checks both READY T4 workers, diagnostic connectivity and
+supported-size schemas before dispatch. Checks repeat before each request.
+Worker registration/software changes or unavailability stop new dispatches and
+produce an incomplete experiment. Metadata whitelists hardware/software fields;
+tunnel addresses, credentials and environment variables are not saved. Trial
+responses record actual CUDA/PyTorch versions. Code hashes, Git commit, Python
+and package versions, seed, rounds, order, assignments and timing definitions
+support provenance. Input generation retains seed-0 SmallCNN weights and private
+CUDA block seeds 1000+block, float32, no_grad, ten warmups and one timed forward.
+
+Each invocation creates `results/scaling/validation_<UTC timestamp>_<ID>/`:
+
+- `measurements.csv`: immutable-by-analysis raw attempts.
+- `metadata.json`: method, targets, sanitized workers and stop/completion state.
+- `analysis/summary.csv`: per-size/configuration descriptive statistics and CIs.
+- `analysis/comparisons.csv` and `analysis/analysis.json`: effects, CIs and source hashes.
+- `analysis/wall_time.png`, `speedup.png`, `throughput.png`, `trials.png`.
+- `analysis/report.md`: measured values, interpretation, failures and limitations.
+
+Analyze the same saved experiment again without live requests:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/analyze_scaling_validation.py "results/scaling/validation_<timestamp>_<ID>" --resamples 5000
+```
+
+Analysis does not modify measurements or experiment metadata; derived analysis
+files alone are regenerated. Bootstrap seed defaults to the experiment seed and
+can be explicitly overridden with `--seed`. Reanalysis uses the same recorded
+rounds/order. Metadata incompatibility is rejected. This tool deliberately does
+not pool older five-trial CSVs: they lack round/seed/source metadata needed to
+prove compatibility. Confirmation results from the same new run are reused for
+the crossover plot, so 1024/4096 are not rerun as exploratory sizes.
+
+Primary effects use mean client perf_counter HTTP wall time, ending at complete
+body receipt before JSON parsing. Separate server times, summed GPU compute,
+and server-based reported throughput are retained. Descriptive statistics include
+means, medians, sample SD, min/max and linearly interpolated IQR. All successful
+outliers remain. Failed attempts stay in raw data and failure counts.
+
+Uncertainty uses 5000 seeded bootstrap resamples and 95% percentile intervals.
+Individual mean intervals resample observations within run-order strata.
+Comparison intervals jointly resample whole rounds within first-configuration
+strata, preserving pairing and retaining incomplete successful rounds. At least
+five paired rounds are required for a comparison interval; targets must also be
+met before any direct speedup comparison. It assumes rounds are exchangeable
+within strata; temporal correlation and failure-related missingness can violate
+coverage. Five-trial exploratory CIs are unstable and pointwise (not adjusted for
+multiple workload comparisons). The report does not claim universal significance.
+The 4096 confirmation requires 20+ successes each and a two-minus-one wall-time
+interval wholly below zero to describe conditional evidence of an advantage.
+
+Plots label ms, images/s, workload counts and CI method. If live preflight is
+blocked, report/plots state missing measurements instead of fabricating points.
+The smallest tested mean advantage is an observed tested point, never an exact
+crossover threshold. More independent sessions are the next experiment if
+confirmation remains uncertain; no new scheduling/training architecture is added.
