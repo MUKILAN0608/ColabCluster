@@ -1,0 +1,7 @@
+{
+  "controller_url": "http://127.0.0.1:8000",
+  "trials": 5,
+  "timeout": 135,
+  "max_attempts_per_configuration": 10,
+  "preflight_error": "Preflight blocked: ValueError: Controller lacks /inference/scaling; restart it with the updated source"
+}

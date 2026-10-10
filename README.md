@@ -803,3 +803,152 @@ lock prevents overlapping local work. As before, HTTP timeout does not cancel
 remote CUDA work. No retries, queues, scheduler or training were added.
 Automated tests use mocked GPU/network execution; the real baseline and its
 10-run benchmark have not been executed as part of this implementation.
+
+
+## Step 8.2: 10-run single-worker benchmark
+
+From the project directory, with the controller and updated Colab worker running:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\benchmark_single_worker.py
+```
+
+Options: `--controller-url http://127.0.0.1:8000 --runs 10 --timeout 135`.
+The runner issues sequential POSTs with `{}`, no automatic retries, to
+`/inference/single-worker`. Each request uses the existing fixed 64-sample
+SmallCNN workload. The controller selects the worker; the CSV records its actual
+identity for every response. A requests timeout bounds connection/read waits,
+not an absolute deadline for a response that keeps delivering bytes.
+
+Results go to `results/single_worker_benchmark.csv` relative to the project root,
+regardless of the launching directory. Each attempt is flushed immediately,
+including failures, HTTP status and error details. Rerunning replaces this
+single-worker CSV; preserve it elsewhere first if needed. Two-worker results
+are untouched. A nonzero exit code means at least one attempt failed.
+
+Client wall time uses `perf_counter()` around the complete HTTP request/body
+receipt, before JSON parsing, and is separate from server `wall_time_ms` and
+GPU inference time. The summary reports success/failure counts and mean, median,
+sample standard deviation, minimum and maximum client time, plus mean GPU time
+and effective throughput. Statistics include only validated successful runs;
+missing statistics print `null` (including sample deviation with fewer than two
+successes). Invalid/missing required measurements fail validation while retaining
+available fields. Failures remain in the CSV and are never silently discarded.
+This step collects a baseline only; it does not calculate two-worker speedup.
+
+
+## Step 8.3: 10-run two-worker benchmark
+
+With the controller and both READY workers running, execute from the project directory:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\benchmark_two_worker.py
+```
+
+Options match the single-worker runner: `--controller-url http://127.0.0.1:8000
+--runs 10 --timeout 135`. Ten sequential requests send `{}` to
+`/inference/two-worker`; parallel GPU dispatch remains internal to that endpoint.
+The benchmark shares the single-worker HTTP timing, failure handling and CSV
+writer. Client wall time ends when the complete HTTP response arrives, before
+JSON parsing. Server `parallel_wall_time_ms` is saved separately as
+`server_wall_time_ms`.
+
+`results/two_worker_benchmark.csv` records every attempt, HTTP status/error,
+worker count, actual IDs, GPU models, 64 total samples, two output shapes,
+combined GPU time and effective throughput. Success requires two distinct
+workers each reporting passed CUDA execution of 32 samples with output `[32,10]`.
+Combined GPU time uses `sum_worker_gpu_time_ms`, falling back to the sum of both
+worker times; unavailable GPU times are blank. Summary GPU-time availability
+is explicitly counted. All statistics exclude failed attempts, which remain
+in the CSV; standard deviation is the sample statistic, or null with fewer than
+two successes. The existing single-worker CSV is never touched. Rerunning this
+command replaces only the two-worker CSV; archive it first to retain prior runs.
+This step does not calculate or claim speedup.
+
+
+## Step 8.4: Compare saved inference benchmarks
+
+```powershell
+.\.venv\Scripts\python.exe scripts\compare_inference_benchmarks.py
+```
+
+Reads `results/single_worker_benchmark.csv` and `results/two_worker_benchmark.csv`
+without changing them or issuing live requests. Writes
+`results/benchmark_comparison.md`. Optional `--single`, `--two`, and `--output`
+paths support other saved files; output cannot be either input file.
+
+The primary comparison uses mean **client** wall time: speedup is single/two,
+wall-time change is (two-single)/single, and conventional efficiency is speedup/2.
+The report also includes sample deviation, server timings, optional GPU timings,
+and mean API-reported throughput. Two-worker GPU timing is the sum across GPUs,
+not elapsed wall time. Failed/incomplete rows are explicitly listed and excluded
+from statistics; successful outliers are retained. Missing required columns
+produce an error; unavailable statistics display N/A.
+
+Within +/-5% mean wall-time change is labelled approximately equivalent as a
+descriptive convention, not a significance test. The report separates measured
+values from interpretation, covers the fixed 64-sample versus 32/32 workload and
+HTTP overhead, and explains the limits of these small, separately collected runs.
+It does not establish a general distributed-inference speedup.
+
+
+## Step 8.5: Workload scaling
+
+New controller endpoint `POST /inference/scaling` accepts only:
+
+```json
+{"total_samples": 1024, "worker_count": 2}
+```
+
+Supported totals: **64, 256, 1024, 4096**. Counts: **1 or 2**. Existing fixed
+single/two-worker endpoints and their default 64-sample behavior are unchanged.
+The worker endpoint at the same path additionally receives a partition index.
+Single-worker selection remains first READY by ID; two-worker selection remains
+`COLAB-GPU-TEST` and `COLAB-GPU-TEST-2`. Both must be Tesla T4 CUDA workers.
+
+The shared SmallCNN loop retains seed-0 model initialization, float32 CUDA,
+no gradients, ten warmups and one timed forward. Synthetic input uses global
+32-sample blocks seeded 1000 + block index: one worker processes all blocks;
+two workers process disjoint contiguous halves of exactly the same workload.
+Output shapes and per-worker sample assignments are validated, including that
+summed output samples equal the requested total. All supported totals divide
+evenly; the partition helper assigns any remainder to the first worker and is
+unit-tested on odd totals. Unsupported totals still return 422.
+
+Before live measurement, rebuild/upload `artifacts/colabcluster-worker.zip` in
+both Colab runtimes and restart their worker processes, preserving IDs and tunnel
+URLs. Restart the controller with updated source; workers must re-register after
+controller restart. Do not start a second process on occupied port 8000.
+
+```powershell
+.\.venv\Scripts\python.exe scripts/build_colab_bundle.py
+.\.venv\Scripts\python.exe scripts/benchmark_scaling.py --trials 5
+```
+
+Options: `--controller-url http://127.0.0.1:8000`, `--timeout 135`, and
+`--trials N` (minimum 5). GET-only preflight checks the running controller's
+scaling endpoint, both READY workers, their hardware, diagnostic connectivity
+and worker scaling endpoints before inference starts. Stale source/offline
+workers produce a recorded preflight error, with no inference requests.
+
+For every size, one/two-worker requests alternate, with alternating order per
+round, targeting at least five successes each. Attempts stop after twice the
+requested target per configuration if errors persist; every failed attempt
+is recorded, and unmet targets produce an incomplete report and nonzero exit.
+There is no retry of a request inside the HTTP client. A timeout does not cancel
+remote work; subsequent attempts may receive busy errors. Successes do not hide
+failed attempts. Each run includes a unique timestamp/ID directory under
+`results/scaling/`, with `measurements.csv`, `metadata.json`, and its own report.
+The latest report is also written to `results/scaling/scaling_report.md`.
+Previous run directories and all existing baseline CSVs remain untouched.
+
+Both configurations use identical client `perf_counter` HTTP timing. The shared
+scaling server path includes executor/HTTP/setup/warmup/validation overhead for
+both counts. CSVs record requested total, per-worker assignments, IDs, GPU models,
+output shapes, client/server wall time, summed/per-worker GPU time, reported
+throughput, status, and errors. Reports compare successful means, medians and
+sample deviations only after both configurations meet the target; no outliers
+are removed. GPU time is summed compute, not parallel wall time; throughput is
+API-reported samples/server-wall-seconds. Small samples, ascending workload order,
+network latency and ephemeral Colab conditions limit generalization. No statistical
+significance or performance improvement is claimed without measured evidence.

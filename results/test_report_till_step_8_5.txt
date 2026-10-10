@@ -1,0 +1,128 @@
+COLABCLUSTER - TEST AND BENCHMARK REPORT
+============================================================
+Date: 10 October 2026 (Asia/Calcutta)
+Scope: Work completed through Step 8.5. This is a saved-results report, not a claim that workers are currently connected.
+
+1. CURRENT AUTOMATED TEST RESULTS
+------------------------------------------------------------
+Command: .\.venv\Scripts\python.exe -m pytest -q
+Latest verification: 351 passed, 0 failed, 1 warning; duration 4.22 seconds.
+Warning: Starlette TestClient reports that httpx support is deprecated in favor of httpx2.
+The warning did not fail the suite.
+
+Coverage includes registration, heartbeat, registry cleanup, worker isolation,
+matrix/SmallMLP/SmallCNN diagnostics, fixed single/two-worker inference,
+concurrent dispatch, state restoration after failures, benchmark parsing and CSV
+persistence, comparison calculations, scaling validation and preflight safeguards.
+Automated GPU/network tests use mocks; passing them alone does not prove real GPU execution.
+
+2. COMPLETED MILESTONES
+------------------------------------------------------------
+Multi-worker readiness: 206 tests passed at that stage.
+Fixed two-worker parallel inference: 240 tests passed at that stage.
+Fixed single-worker baseline endpoint: 262 tests passed at that stage.
+Step 8.2 single-worker benchmark: 281 tests passed; 10/10 live runs passed.
+Step 8.3 two-worker benchmark: 299 tests passed; 10/10 live runs passed.
+Step 8.4 comparison report: 314 tests passed; comparison generated from saved CSVs.
+Step 8.5 scaling implementation: 351 tests passed; live scaling trials remain blocked.
+These are successive suite totals, not counts to add together.
+
+3. SAVED LIVE BENCHMARKS - FIXED 64-SAMPLE WORKLOAD
+------------------------------------------------------------
+Model: SmallCNN. Hardware recorded in CSVs: Tesla T4.
+Single worker: COLAB-GPU-TEST, 64 samples.
+Two workers: COLAB-GPU-TEST and COLAB-GPU-TEST-2, 32 samples each.
+Synthetic float32 inputs; inference only; ten warmups and one timed forward.
+Each benchmark issued 10 sequential requests; the two-worker endpoint dispatched
+its two remote batches concurrently.
+
+Attempts                                 Single:     10.000   Two:     10.000
+Successful runs                          Single:     10.000   Two:     10.000
+Failed/incomplete runs                   Single:      0.000   Two:      0.000
+Mean client wall time (ms)               Single:    739.060   Two:    940.183
+Median client wall time (ms)             Single:    647.797   Two:    858.157
+Sample standard deviation (ms)           Single:    247.319   Two:    299.188
+Minimum client wall time (ms)            Single:    572.221   Two:    625.943
+Maximum client wall time (ms)            Single:   1360.598   Two:   1391.545
+Mean server wall time (ms)               Single:    720.460   Two:    925.824
+Mean GPU time (ms)*                      Single:      0.574   Two:      0.719
+Mean reported throughput (images/sec)    Single:     95.577   Two:     75.450
+
+* Two-worker GPU time is the sum of both GPU compute times, not elapsed parallel time.
+Client time includes the complete HTTP request/body receipt before JSON parsing.
+Server time and GPU time are separate measurements. Reported throughput is based
+on server wall time; mean reported throughput is not samples / mean client time.
+
+4. PER-RUN SAVED MEASUREMENTS
+------------------------------------------------------------
+
+single_worker_benchmark.csv
+Run  Status   Client ms    Server ms    GPU ms*    Reported images/sec
+  1  passed    1360.598    1353.375      0.554               47.289
+  2  passed     979.574     957.103      0.558               66.868
+  3  passed     702.059     693.823      0.800               92.243
+  4  passed     658.782     632.443      0.546              101.195
+  5  passed     643.819     622.401      0.567              102.828
+  6  passed     572.221     550.793      0.538              116.196
+  7  passed     651.775     643.900      0.545               99.394
+  8  passed     635.519     610.559      0.546              104.822
+  9  passed     611.754     594.404      0.534              107.671
+ 10  passed     574.500     545.797      0.548              117.260
+
+two_worker_benchmark.csv
+Run  Status   Client ms    Server ms    GPU ms*    Reported images/sec
+  1  passed    1391.545    1384.807      0.708               46.216
+  2  passed    1010.327    1003.800      0.917               63.758
+  3  passed     967.541     936.171      0.647               68.364
+  4  passed     667.952     653.419      0.727               97.946
+  5  passed    1273.414    1253.551      0.618               51.055
+  6  passed     673.453     667.313      0.844               95.907
+  7  passed     712.135     688.419      0.780               92.967
+  8  passed     748.773     741.587      0.624               86.301
+  9  passed    1330.744    1308.211      0.624               48.922
+ 10  passed     625.943     620.959      0.706              103.066
+
+5. OBSERVED COMPARISON
+------------------------------------------------------------
+Speedup (single mean / two-worker mean): 0.786x
+Two-worker client wall-time change: +27.21%
+Mean reported throughput change: -21.06%
+Conventional parallel efficiency (speedup / 2): 39.30%
+The two-worker configuration was slower for this measured 64-sample workload.
+Efficiency below this speedup does not demonstrate useful scaling.
+Only 10 runs per configuration were collected, separately rather than as
+randomized paired trials. No successful outliers were removed. No statistical
+significance or general conclusion about distributed inference is claimed.
+
+6. STEP 8.5 SCALING STATUS
+------------------------------------------------------------
+Implemented workload sizes: 64, 256, 1024 and 4096 samples.
+Configurations: one worker and two workers.
+Target: at least 5 successful trials for each of the 8 combinations (40 successes).
+Completed live scaling trials in saved report: 0.
+Failed live inference trials: 0; readiness preflight blocked before dispatch.
+Last recorded blocker: Controller lacks /inference/scaling; restart it with the updated source.
+This is the last saved preflight result, not a fresh connectivity check for this report.
+No measured workload crossover or scaling speedup is available.
+The worker bundle was rebuilt and its contents/CRC verified during implementation.
+Both prior benchmark CSVs were verified unchanged after Step 8.5.
+
+7. VALIDATION AND REMAINING WORK
+------------------------------------------------------------
+Prior browser checks passed for worker cards, one/two-worker inference controls,
+success/error states and mobile layout, with no JavaScript errors observed.
+No live benchmark was rerun while producing this text report.
+To finish live scaling verification, restart the updated controller, upload the
+current worker bundle to both Colab runtimes, restart/re-register both workers,
+and run: .\.venv\Scripts\python.exe scripts\benchmark_scaling.py --trials 5
+
+8. SOURCE ARTIFACTS (RELATIVE TO PROJECT ROOT)
+------------------------------------------------------------
+results/single_worker_benchmark.csv
+results/two_worker_benchmark.csv
+results/benchmark_comparison.md
+results/scaling/scaling_report.md
+artifacts/colabcluster-worker.zip
+tests/
+
+END OF REPORT

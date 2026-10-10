@@ -2,6 +2,8 @@
 
 from common.schemas import TwoWorkerRequest, TwoWorkerResponse, SingleWorkerRequest, SingleWorkerResponse
 from controller.inference import run_two_worker, run_single_worker
+from common.scaling import ScalingRequest, ScalingResponse
+from controller.scaling import run_scaling
 from typing import Annotated
 from pathlib import Path
 from fastapi.responses import FileResponse
@@ -144,3 +146,9 @@ def two_worker_inference(payload: TwoWorkerRequest, request: Request, registry: 
 def single_worker_inference(payload: SingleWorkerRequest, request: Request, registry: Registry):
     """Run the fixed 64-sample baseline on the first READY worker by ID."""
     return run_single_worker(registry, request.app.state.worker_timeout)
+
+
+@router.post("/inference/scaling", response_model=ScalingResponse)
+def scaling_inference(payload: ScalingRequest, request: Request, registry: Registry):
+    """Run only the four supported workload sizes with one or two workers."""
+    return run_scaling(registry, payload, request.app.state.worker_timeout)
