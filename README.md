@@ -1,6 +1,46 @@
 # ColabCluster
 
+Timeout and execution safety: see [Step 8.6A report and deployment commands](STEP_8_6A_REPORT.txt).
+An ambiguous remote execution is retained as `status=error` with
+`metadata.execution.state=unknown`; use `POST /workers/{worker_id}/reconcile`
+to confirm completion before dispatching again. Active and unknown reservations
+are protected from liveness expiry and unregister. Restart both controller and
+workers to deploy this protocol; do not restart while GPU work may still run.
+
 ColabCluster is a lightweight open-source distributed AI orchestration platform for ephemeral and heterogeneous GPU workers.
+
+## Benchmark Results Summary
+
+The recorded repeatability experiment used SmallCNN inference on two independent
+Google Colab Tesla T4 workers. **45 of 46 inference attempts passed**; one failed
+with an HTTP 504 timeout. A subsequent diagnostic connectivity timeout stopped
+the experiment before all trial targets were reached.
+
+| Workload | Single-worker successful trials | Two-worker successful trials | Mean single-worker wall time | Mean two-worker wall time |
+|---|---:|---:|---:|---:|
+| 1,024 samples | 20/20 | 20/20 | 663.80 ms | 862.02 ms |
+| 4,096 samples | 3/20 | 2/20 | 984.10 ms | 859.02 ms |
+
+Times are client-measured end-to-end HTTP wall times, not GPU-only compute times.
+At **1,024 samples**, two workers took **29.86% longer** (speedup ratio: **0.770×**).
+The 95% round-bootstrap interval for the extra wall time was **59.69–433.82 ms**,
+supporting a slowdown within this experiment's statistical assumptions.
+
+The **4,096-sample confirmation is incomplete**; its partial averages do not
+establish a performance advantage. An earlier, separate five-trial experiment
+observed **11.33% lower wall time** with two workers at that size, but the larger
+confirmation run has not verified it. The remaining exploratory workloads were
+not run in this repeatability experiment.
+
+**Conclusion:** parallel inference works, but a repeatable performance advantage
+and an exact workload crossover have not been established. These observations
+apply to this model, hardware and network setup, not distributed inference in
+general. Restore stable worker connectivity and complete a controlled confirmation
+experiment before making broader performance claims.
+
+- [Detailed repeatability report](results/scaling/validation_20261010T115546Z_5d593f1c/analysis/report.md)
+- [Raw measurements](results/scaling/validation_20261010T115546Z_5d593f1c/measurements.csv)
+- [Earlier five-trial scaling report](results/scaling/20261010T093440Z-b49f5e6d/scaling_report.md)
 
 ## Project Vision
 

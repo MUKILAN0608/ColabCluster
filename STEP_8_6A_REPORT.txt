@@ -1,0 +1,179 @@
+COLABCLUSTER -- STEP 8.6A COMPLETION REPORT
+Date: 10 October 2026
+
+RESULT
+Implemented and verified locally. Targeted lifecycle tests: 39 passed.
+Full suite: 430 passed, 0 failed, 0 skipped (9.23 seconds).
+One existing Starlette/httpx TestClient deprecation warning remains.
+No live GPU benchmarks were run. Historical experiment files were not edited.
+Controller and both Colab workers must be redeployed before using this fix.
+
+VERIFIED DIAGNOSIS
+The request path is benchmark_single_worker.attempt -> controller API ->
+run_single_worker/run_two_worker/run_scaling -> HTTP POST through a worker's
+Cloudflare tunnel -> worker.diagnostics -> worker.inference.run_inference.
+The worker holds one shared GPU lock during synchronous GPU execution.
+
+Previously controller/inference.py:forward and
+controller/scaling.py:forward_scaling used timeout=(5,120), independently of
+the benchmark's --timeout 135. NN/CNN/GPU diagnostic forwarding did the same.
+Their generic requests.Timeout handlers hid whether connection or response
+waiting failed. Registry cleanup in finally called finish_nn_test and marked
+the worker READY even when the request timed out. This is the verified local
+lifecycle defect: an HTTP timeout does not stop the remote GPU operation.
+
+Historical validation_20261010T115546Z_5d593f1c recorded 45 passes in 46
+attempts. Row 46 returned the controller-generated HTTP 504 detail in about
+5402 ms. Its metadata subsequently recorded a preflight ReadTimeout with
+"read timeout=5". Neither event establishes a 120-second GPU execution timeout.
+
+The installed urllib3 HTTPSConnectionPool._make_request sets the connection
+timeout before _validate_conn. A socket timeout during HTTPS validation can
+be converted to ReadTimeoutError using that connection timeout (5 seconds).
+test_https_connect_phase_can_be_reported_as_read_timeout reproduces this
+mechanism without networking. This explains how the message is possible
+despite a longer read budget. The historical records lack the exception chain
+and remote execution logs needed to prove the exact phase or network cause.
+No claim is made that Cloudflare itself enforced a five-second deadline or
+that the T4 computation failed. Increasing every timeout would not fix the
+unsafe READY transition.
+
+TIMEOUT INVENTORY AND CONFIGURATION
+common/config.py:http_timeout now validates finite positive seconds.
+Environment settings (CONNECT and READ are separate):
+  COLABCLUSTER_INFERENCE_CONNECT_TIMEOUT=5
+  COLABCLUSTER_INFERENCE_READ_TIMEOUT=120
+  COLABCLUSTER_PREFLIGHT_CONNECT_TIMEOUT=5
+  COLABCLUSTER_PREFLIGHT_READ_TIMEOUT=15
+  COLABCLUSTER_HEARTBEAT_CONNECT_TIMEOUT=5
+  COLABCLUSTER_HEARTBEAT_READ_TIMEOUT=15
+
+Inference settings apply to all six controller-to-worker execution routes.
+Preflight settings apply to benchmark metadata GETs and reconciliation GETs.
+Heartbeat settings apply to registration, heartbeat and unregister requests.
+The benchmark's --timeout 135 still applies only to its own controller HTTP
+request. Requests timeouts bound connection and read inactivity, not total
+wall time; they are not transmitted as a GPU execution deadline.
+
+Other distinct budgets: worker heartbeat interval 10 seconds; controller
+liveness expiry 30 seconds; monitor interval at most 5 seconds; diagnostic
+server startup wait 10 seconds and shutdown thread join 5 seconds.
+Dashboard fetch aborts: polling 8 seconds, NN/CNN 130 seconds, fixed inference
+140 seconds. Browser cancellation does not cancel server computation.
+There is no application-level total execution deadline or remote CUDA
+cancellation. Uvicorn keep-alive is not an active GPU request deadline.
+Cloudflare/proxy limits are external, not configured by this application;
+historical evidence does not identify a proxy limit responsible for the event.
+
+CHANGES AND SAFE LIFECYCLE
+controller/transport.py:post_execution centralizes single-attempt dispatch.
+It sends a unique X-ColabCluster-Request-ID and distinguishes connect_timeout,
+read_timeout, generic transport_timeout, connection_error, remote_http_error,
+and correlated worker_execution_error. Errors retain a string detail field,
+request ID, timeout budgets and bounded remote error text. Remote HTTP 504
+remains 504. ConnectTimeout is treated as not_started; ambiguous transport
+failures and uncorrelated proxy errors remain unknown. No POST is retried.
+
+worker/diagnostics.py records running/completed/failed execution states under
+the shared slot lock. GET /executions/{request_id} reports the worker ID,
+request ID, state and slot_available. Reusing a recorded ID returns 409 and
+does not execute again. Legacy calls without headers still work and share
+the same lock. Worker execution errors carry matching acknowledgement headers.
+
+controller/registry.py retains active reservations and unknown executions.
+Unknown executions use status=error plus metadata.execution.state=unknown,
+so existing status enums remain compatible and the uncertainty is explicit.
+Ordinary READY heartbeats, stale-record expiry and unregister cannot release
+these reservations. All diagnostic routes now reserve the same execution slot.
+A successful peer in two-worker inference returns to READY independently.
+
+POST /workers/{worker_id}/reconcile performs a read-only worker status query.
+Only a matching completed/failed execution with a free slot releases the
+reservation. Running, unknown, unreachable, malformed and mismatched replies
+keep it unavailable. metadata.execution.observed_remote_state records valid
+observations. Reconciliation never resubmits inference or cancels remote work.
+It is explicitly invoked, not automatically polled.
+
+TEST COVERAGE
+tests/test_execution_lifecycle.py adds 39 cases covering settings propagation,
+invalid settings, connect/read/generic errors, proxy HTTP errors including 504,
+continued remote execution after a lost reply, duplicate rejection before and
+after completion, quarantine, heartbeat/expiry/unregister protection, matching
+reconciliation, confirmed failure, caller timeout while controller stays busy,
+ledger capacity, stale identity guards and the urllib3 five-second mechanism.
+Existing success, schema, concurrency and validation assertions remain.
+Old assertions expecting READY after ambiguous failures were changed to ERROR;
+active unregister tests now require rejection until completion. These are
+intentional corrections to unsafe semantics, not removed failure coverage.
+
+LIMITATIONS
+This does not guarantee network availability or remotely cancel CUDA threads.
+Controller registry and worker execution ledger are process-local. Run one
+controller process and one worker server per GPU slot; do not use --workers
+or controller --reload during GPU execution. Stop all work before restarts.
+An unknown request absent from the ledger is NOT proof it never started; a
+delayed request might still arrive. Legacy workers cannot reconcile and must
+be redeployed. Do not clear quarantine just by re-registering a worker.
+The ledger retains up to 4096 IDs without eviction, then rejects new tracked
+work. Restart an idle worker during controlled maintenance before that limit.
+If the worker/runtime is lost or a request cannot be reconciled, shut down its
+runtime and old tunnel, then restart the controller and workers together so
+old delayed requests cannot reach the new execution slot. This is operational
+recovery, not automatic cancellation or persistent exactly-once execution.
+Live Colab verification remains pending deployment; no live success is claimed.
+
+SAFE DEPLOYMENT -- WINDOWS POWERSHELL
+1. Stop benchmark callers. Confirm both workers idle, or terminate the affected
+   Colab runtime and its tunnel if execution cannot be confirmed stopped.
+2. Stop both old worker processes. Stop the existing controller using Ctrl+C
+   in its terminal. Do not start a second controller on occupied port 8000.
+3. From PowerShell:
+
+cd "C:\Users\Mukil\New folder (12)\colabcluster"
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe scripts/build_colab_bundle.py
+$env:COLABCLUSTER_INFERENCE_CONNECT_TIMEOUT = "5"
+$env:COLABCLUSTER_INFERENCE_READ_TIMEOUT = "120"
+.\.venv\Scripts\python.exe -m uvicorn controller.main:app --host 0.0.0.0 --port 8000
+
+Keep that terminal running. Keep the controller's tunnel running in its own
+terminal, or start it if necessary:
+cloudflared tunnel --url http://localhost:8000
+Use the current controller tunnel URL, not an expired historical URL.
+
+COLAB -- PER RUNTIME
+Upload artifacts/colabcluster-worker.zip to each Colab session. Preserve each
+runtime's independent worker tunnel and use its current URL. If starting a
+fresh runtime, establish its tunnel to http://localhost:8001 separately.
+Run this Python cell after the old worker process has stopped:
+
+from google.colab import files
+files.upload()  # Select colabcluster-worker.zip
+from zipfile import ZipFile
+with ZipFile('/content/colabcluster-worker.zip') as bundle:
+    bundle.extractall('/content/colabcluster-step86a')
+
+Then run a second cell (replace both URL placeholders):
+
+%cd /content/colabcluster-step86a
+import os
+os.environ['COLABCLUSTER_CONTROLLER_URL'] = 'https://YOUR-CURRENT-CONTROLLER-TUNNEL'
+os.environ['COLABCLUSTER_WORKER_URL'] = 'https://THIS-RUNTIMES-WORKER-TUNNEL'
+os.environ['COLABCLUSTER_WORKER_ID'] = 'COLAB-GPU-TEST'
+!python -u -m worker.colab_worker
+
+Use COLAB-GPU-TEST-2 for the second runtime, and its own worker tunnel URL.
+The worker cell should keep running. Existing Colab dependencies are unchanged.
+
+READ-ONLY CHECKS AND RECOVERY -- SEPARATE POWERSHELL TERMINAL
+Invoke-RestMethod http://127.0.0.1:8000/health
+Invoke-RestMethod http://127.0.0.1:8000/workers | ConvertTo-Json -Depth 8
+
+If an execution later becomes unknown:
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/workers/COLAB-GPU-TEST/reconcile | ConvertTo-Json -Depth 8
+
+For the second worker, substitute COLAB-GPU-TEST-2. A 200 reconciliation reply
+does not itself mean READY: inspect status and metadata.execution. Do not
+rerun scaling until deployment and readiness are verified separately.
+
+Stop point: Step 8.6A only. No new features, live benchmarks, commits or pushes.

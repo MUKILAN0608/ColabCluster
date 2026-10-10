@@ -33,6 +33,18 @@ def get_registry(request: Request) -> WorkerRegistry:
 Registry = Annotated[WorkerRegistry, Depends(get_registry)]
 
 
+@router.post("/workers/{worker_id}/reconcile")
+def reconcile_worker(worker_id: str, registry: Registry):
+    """Check the existing execution without submitting new work."""
+    from controller.reconciliation import reconcile
+    try:
+        return reconcile(registry, worker_id)
+    except UnknownWorkerError:
+        raise HTTPException(404, "Worker is not active") from None
+    except WorkerNotReadyError as exc:
+        raise HTTPException(409, str(exc)) from None
+
+
 @router.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     """Report controller health."""
@@ -81,6 +93,8 @@ def unregister_worker(payload: WorkerUnregister, registry: Registry) -> WorkerUn
         registry.unregister_worker(payload.worker_id)
     except UnknownWorkerError:
         raise HTTPException(404, f"Worker '{payload.worker_id}' not found") from None
+    except WorkerNotReadyError as exc:
+        raise HTTPException(409, str(exc)) from None
     return WorkerUnregisterResponse(success=True, message="Worker unregistered", worker_id=payload.worker_id)
 
 
@@ -93,11 +107,16 @@ def cluster_summary(request: Request, registry: Registry) -> ClusterSummary:
 @router.post("/workers/{worker_id}/gpu-test", response_model=GpuTestResponse)
 def gpu_test(worker_id: str, payload: GpuTestRequest, request: Request, registry: Registry) -> GpuTestResponse:
     """Forward a bounded GPU diagnostic to a selected active worker."""
-    workers = registry.get_workers(timeout=request.app.state.worker_timeout)
-    worker = next((item for item in workers if item.worker_id == worker_id), None)
-    if worker is None:
-        raise HTTPException(404, "Worker is not active")
-    return forward_gpu_test(worker, payload)
+    try:
+        worker, original = registry.begin_nn_test(worker_id, request.app.state.worker_timeout)
+    except UnknownWorkerError:
+        raise HTTPException(404, "Worker is not active") from None
+    except WorkerNotReadyError:
+        raise HTTPException(409, "Worker is not ready") from None
+    try:
+        return forward_gpu_test(worker, payload)
+    finally:
+        registry.finish_nn_test(worker_id, original, worker)
 
 
 @router.get("/dashboard", response_class=FileResponse, include_in_schema=False)
@@ -118,7 +137,7 @@ def nn_test(worker_id: str, payload: NnTestRequest, request: Request, registry: 
     try:
         return forward_nn_test(worker)
     finally:
-        registry.finish_nn_test(worker_id, original)
+        registry.finish_nn_test(worker_id, original, worker)
 
 
 @router.post("/workers/{worker_id}/cnn-test", response_model=CnnTestResponse)
@@ -133,7 +152,7 @@ def cnn_test(worker_id: str, payload: CnnTestRequest, request: Request, registry
     try:
         return forward_cnn_test(worker)
     finally:
-        registry.finish_nn_test(worker_id, original)
+        registry.finish_nn_test(worker_id, original, worker)
 
 
 @router.post("/inference/two-worker", response_model=TwoWorkerResponse)

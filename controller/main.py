@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
 
-from common.config import positive_seconds
+from common.config import positive_seconds, http_timeout
 from controller.api import router
 from controller.liveness import monitor_workers
 from controller.registry import WorkerRegistry
@@ -15,6 +15,8 @@ from controller.registry import WorkerRegistry
 def create_app() -> FastAPI:
     """Create an application with an independent in-memory registry."""
     timeout = positive_seconds("COLABCLUSTER_WORKER_TIMEOUT", 30)
+    http_timeout()  # Fail before serving requests on invalid dispatch configuration.
+    http_timeout("preflight")
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:

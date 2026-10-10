@@ -64,6 +64,8 @@ def test_one_request_ordering_timing_and_restoration(client,monkeypatch,count):
     def post(url,**kwargs):
         events.append("post")
         assert url=="https://a.example/inference/single-worker"
+        request_id = kwargs.pop("headers")["X-ColabCluster-Request-ID"]
+        assert len(request_id) == 32 and int(request_id, 16) >= 0
         assert kwargs==dict(json={},timeout=(5,120),allow_redirects=False)
         assert states(client)==({"a":"busy","b":"ready"} if count==2 else {"a":"busy"})
         client.post("/workers/heartbeat",json={"worker_id":"a","status":"ready"})
@@ -121,7 +123,7 @@ def test_failure_restores_selected_worker(client,monkeypatch,failure,code):
     if failure=="connection":transport.side_effect=requests.ConnectionError()
     monkeypatch.setattr("controller.inference.requests.post",transport)
     assert client.post("/inference/single-worker",json={}).status_code==code
-    assert states(client)=={"a":"ready","b":"ready"}
+    assert states(client)=={"a":"error" if failure in ("timeout","connection","http") else "ready","b":"ready"}
     if failure not in ("timeout","connection"): response.close.assert_called_once()
 
 
@@ -137,14 +139,16 @@ def test_expired_worker_not_selected(client,monkeypatch):
         assert client.post("/inference/single-worker",json={}).status_code==409
 
 
-def test_removal_is_not_undone(client,monkeypatch):
+def test_active_worker_cannot_be_unregistered(client,monkeypatch):
     register(client,"a")
     def post(*args,**kwargs):
-        client.post("/workers/unregister",json={"worker_id":"a"})
+        assert client.post("/workers/unregister",json={"worker_id":"a"}).status_code == 409
         response=Mock(status_code=200);response.json.return_value=result()
         return response
     monkeypatch.setattr("controller.inference.requests.post",post)
     assert client.post("/inference/single-worker",json={}).status_code==200
+    assert states(client)=={"a":"ready"}
+    assert client.post("/workers/unregister",json={"worker_id":"a"}).status_code == 200
     assert states(client)=={}
 
 

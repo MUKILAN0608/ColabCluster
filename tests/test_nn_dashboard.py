@@ -100,7 +100,8 @@ def test_transport_failure_restores_status(client,monkeypatch,error,code):
     register(client,metadata={"diagnostic_url":"https://worker.example"})
     monkeypatch.setattr("controller.nn_test.requests.post",Mock(side_effect=error))
     assert client.post("/workers/nn/nn-test",json={}).status_code == code
-    assert client.get("/workers").json()["workers"][0]["status"] == "ready"
+    assert client.get("/workers").json()["workers"][0]["status"] == "error"
+    assert client.get("/workers").json()["workers"][0]["metadata"]["execution"]["state"] == "unknown"
 
 
 @pytest.mark.parametrize("body", [{}, result("wrong").model_dump(mode="json"),
@@ -113,14 +114,17 @@ def test_invalid_remote_result(client,monkeypatch,body):
     assert client.post("/workers/nn/nn-test",json={}).status_code == 502
 
 
-def test_cleanup_does_not_resurrect_worker(client,monkeypatch):
+def test_cleanup_does_not_replace_registration(client,monkeypatch):
     register(client,metadata={"diagnostic_url":"https://worker.example"})
     def forward(worker):
-        client.post("/workers/unregister",json={"worker_id":"nn"})
-        register(client,status="error")
+        assert client.post("/workers/unregister",json={"worker_id":"nn"}).status_code == 409
+        assert register(client,status="error").status_code == 409
         return result()
     monkeypatch.setattr("controller.api.forward_nn_test",forward)
     assert client.post("/workers/nn/nn-test",json={}).status_code == 200
+    assert client.get("/workers").json()["workers"][0]["status"] == "ready"
+    assert client.post("/workers/unregister",json={"worker_id":"nn"}).status_code == 200
+    assert register(client,status="error").status_code == 201
     assert client.get("/workers").json()["workers"][0]["status"] == "error"
 
 

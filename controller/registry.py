@@ -89,8 +89,9 @@ class WorkerRegistry:
         """Delete inactive records while the caller holds the registry lock."""
         expired = [
             worker_id for worker_id, worker in self._workers.items()
-            if worker.status == WorkerStatus.OFFLINE
-            or (current - worker.last_seen).total_seconds() > timeout
+            if (worker.status == WorkerStatus.OFFLINE
+                or (current - worker.last_seen).total_seconds() > timeout)
+            and self._inference_reservations.get(worker_id) is not worker
         ]
         for worker_id in expired:
             del self._workers[worker_id]
@@ -102,7 +103,9 @@ class WorkerRegistry:
     def unregister_worker(self, worker_id: str) -> None:
         """Remove an existing worker, or raise UnknownWorkerError."""
         with self._lock:
-            self._require_worker(worker_id)
+            worker = self._require_worker(worker_id)
+            if self._inference_reservations.get(worker_id) is worker:
+                raise WorkerNotReadyError("Execution active or unknown; reconcile before unregistering")
             del self._workers[worker_id]
 
     def _require_worker(self, worker_id: str) -> WorkerInfo:
@@ -121,16 +124,40 @@ class WorkerRegistry:
             if worker.status != WorkerStatus.READY:
                 raise WorkerNotReadyError(worker_id)
             worker.status = WorkerStatus.BUSY
+            self._inference_reservations[worker_id] = worker
             return worker.model_copy(deep=True), worker
 
-    def finish_nn_test(self, worker_id: str, original: WorkerInfo) -> None:
+    def finish_nn_test(self, worker_id: str, original: WorkerInfo, dispatched: WorkerInfo | None = None) -> None:
         """Restore only the same registration, never recreate an expired record."""
         with self._lock:
             current = self._workers.get(worker_id)
+            execution = (dispatched.metadata or {}).get("execution") if dispatched else None
+            if current is original and execution:
+                current.metadata = {**(current.metadata or {}), "execution": dict(execution)}
+                if execution["state"] == "unknown":
+                    current.status = WorkerStatus.ERROR
+                    self._inference_reservations[worker_id] = current
+                    return
             if self._inference_reservations.get(worker_id) is original:
                 del self._inference_reservations[worker_id]
             if current is original and current.status == WorkerStatus.BUSY:
                 current.status = WorkerStatus.READY
+
+    def reconcile_execution(self, worker_id: str, registered_at, request_id: str, state: str,
+                            slot_available: bool) -> WorkerInfo:
+        """Release only the exact quarantined registration and execution."""
+        with self._lock:
+            worker = self._require_worker(worker_id)
+            execution = (worker.metadata or {}).get("execution", {})
+            if worker.registered_at != registered_at or execution.get("request_id") != request_id:
+                raise WorkerNotReadyError("Worker registration or execution changed")
+            execution["observed_remote_state"] = state
+            if (execution.get("state") == "unknown" and slot_available
+                    and state in ("completed", "failed")):
+                execution["state"] = state
+                worker.status = WorkerStatus.READY
+                self._inference_reservations.pop(worker_id, None)
+            return worker.model_copy(deep=True)
 
 
     def begin_two_worker_inference(

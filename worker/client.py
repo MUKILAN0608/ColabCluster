@@ -4,6 +4,7 @@ import os
 from urllib.parse import urlsplit
 
 import requests
+from common.config import http_timeout
 from pydantic import ValidationError
 
 from common.schemas import (
@@ -102,7 +103,7 @@ class WorkerClient:
         """Make a bounded request and translate transport/protocol failures."""
         url = f"{self.controller_url}/workers/{operation}"
         try:
-            response = requests.post(url, json=payload, timeout=(5, 15), allow_redirects=False)
+            response = requests.post(url, json=payload, timeout=http_timeout("heartbeat"), allow_redirects=False)
         except requests.Timeout as exc:
             raise WorkerClientError(f"Connection/request timed out at {self.controller_url}") from exc
         except requests.ConnectionError as exc:

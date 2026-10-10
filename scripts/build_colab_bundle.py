@@ -11,7 +11,7 @@ def main() -> None:
     files = [p for folder in ("common", "controller", "worker", "testing")
              for p in sorted((root / folder).glob("*.py"))]
     files += sorted((root / "controller" / "static").glob("*.html"))
-    files += [root / name for name in ("requirements.txt", "pyproject.toml", "README.md")]
+    files += [root / name for name in ("requirements.txt", "pyproject.toml", "README.md", "STEP_8_6A_REPORT.txt")]
     if (root / "LICENSE").is_file():
         files.append(root / "LICENSE")
     for source in files:

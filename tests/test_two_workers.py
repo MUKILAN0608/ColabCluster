@@ -128,8 +128,10 @@ def test_diagnostics_route_to_independent_worker_apps(pair, monkeypatch, kind):
                         f"https://worker-b.example/{kind}-test": b}
 
         def forward(url, **kwargs):
+            headers = kwargs.pop("headers")
+            assert len(headers["X-ColabCluster-Request-ID"]) == 32
             assert kwargs == {"json": {}, "timeout": (5, 120), "allow_redirects": False}
-            return destinations[url].post(f"/{kind}-test", json={})
+            return destinations[url].post(f"/{kind}-test", json={}, headers=headers)
 
         monkeypatch.setattr(f"controller.{kind}_test.requests.post", forward)
         for name in ("a", "b"):
@@ -137,6 +139,10 @@ def test_diagnostics_route_to_independent_worker_apps(pair, monkeypatch, kind):
             response = pair.post(f"/workers/{name}/{kind}-test", json={})
             assert response.status_code == 200, response.text
             assert response.json()["worker_id"] == name
-            assert snapshot(pair) == before
+            after = snapshot(pair)
+            execution = after[name]["metadata"].pop("execution")
+            assert execution["state"] == "completed"
+            assert len(execution["request_id"]) == 32
+            assert after == before
             assert all(w.status == WorkerStatus.READY for w in workers.values())
     assert selected == ["a", "b"]

@@ -1,0 +1,9 @@
+samples,complete,speedup,wall_change_percent,throughput_change_percent,difference_ms,speedup_ci,difference_ci,paired_rounds,unpaired_rounds,ci_method
+256,False,,,,,,,0,0,unavailable
+512,False,,,,,,,0,0,unavailable
+768,False,,,,,,,0,0,unavailable
+1024,True,0.7700482426203203,29.861993658631004,-14.194732465101122,198.22324499764363,"[0.6046647756469555, 0.917113537696247]","[59.691968997503864, 433.8167046217493]",20,0,"95% percentile round-cluster bootstrap, stratified by first configuration"
+1536,False,,,,,,,0,0,unavailable
+2048,False,,,,,,,0,0,unavailable
+3072,False,,,,,,,0,0,unavailable
+4096,False,,,,,,,0,0,unavailable

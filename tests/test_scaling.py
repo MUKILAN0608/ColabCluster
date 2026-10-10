@@ -86,7 +86,7 @@ def test_failure_restores_workers(client,monkeypatch,failure,code):
         return response
     monkeypatch.setattr("controller.scaling.requests.post",post)
     assert client.post("/inference/scaling",json=dict(total_samples=64,worker_count=2)).status_code==code
-    assert all(w["status"]=="ready" for w in client.get("/workers").json()["workers"])
+    assert all(w["status"]==("error" if failure in ("timeout","http") else "ready") for w in client.get("/workers").json()["workers"])
 
 
 @pytest.mark.parametrize("size",SIZES)

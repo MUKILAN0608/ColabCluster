@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from time import perf_counter
 
 import requests
+from controller.transport import post_execution
 from fastapi import HTTPException
 from pydantic import HttpUrl, TypeAdapter, ValidationError
 
@@ -23,21 +24,13 @@ def diagnostic_url(worker):
 
 
 def forward(worker, url, partition, *, single=False):
+    payload = {} if single else {"partition": partition}
+    if single:
+        start = perf_counter()
+    response = post_execution(worker, url, payload)
+    if single:
+        elapsed = perf_counter() - start
     try:
-        payload = {} if single else {"partition": partition}
-        if single:
-            start = perf_counter()
-        response = requests.post(url, json=payload, timeout=(5, 120), allow_redirects=False)
-        if single:
-            elapsed = perf_counter() - start
-    except requests.Timeout:
-        raise HTTPException(504, f"{worker.worker_id} timed out; remote work may still be running") from None
-    except requests.RequestException:
-        raise HTTPException(502, f"Cannot reach {worker.worker_id}") from None
-    try:
-        if response.status_code != 200:
-            raise HTTPException(response.status_code if response.status_code in (409, 503) else 502,
-                                f"Inference failed on {worker.worker_id}")
         try:
             response_type = SingleInferenceResponse if single else InferenceBatchResponse
             result = response_type.model_validate(response.json())
@@ -81,7 +74,7 @@ def run_two_worker(registry, worker_ids, timeout):
     finally:
         # Executor shutdown waits for both calls even when one fails.
         for worker, original in reserved:
-            registry.finish_nn_test(worker.worker_id, original)
+            registry.finish_nn_test(worker.worker_id, original, worker)
 
 
 def run_single_worker(registry, timeout):
@@ -93,4 +86,4 @@ def run_single_worker(registry, timeout):
         url = diagnostic_url(worker) + "/single-worker"
         return forward(worker, url, 0, single=True)
     finally:
-        registry.finish_nn_test(worker.worker_id, original)
+        registry.finish_nn_test(worker.worker_id, original, worker)

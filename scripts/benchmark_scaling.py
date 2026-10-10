@@ -15,6 +15,7 @@ from common.scaling import SIZES, WORKER_IDS, ScalingResponse
 from controller.inference import diagnostic_url
 from common.schemas import WorkerInfo
 import requests
+from common.config import http_timeout
 from fastapi import HTTPException
 
 ROOT = Path(__file__).resolve().parents[1] / "results" / "scaling"
@@ -25,7 +26,12 @@ FIELDS = ("run", "total_samples", "worker_count", "status", "api_status", "http_
 
 
 def get_json(url):
-    response = requests.get(url, timeout=(5,15), allow_redirects=False)
+    timeout = http_timeout("preflight")
+    try:
+        response = requests.get(url, timeout=timeout, allow_redirects=False)
+    except requests.RequestException as exc:
+        raise type(exc)(f"Preflight GET {url}; connect={timeout[0]:g}s read={timeout[1]:g}s; "
+                        f"{type(exc).__name__}: {exc}") from exc
     try:
         response.raise_for_status()
         if response.status_code != 200:

@@ -52,7 +52,8 @@ def test_forwarding(client, monkeypatch):
     assert r.status_code == 200
     assert r.json()["worker_id"] == "gpu"
     post.assert_called_once_with("https://worker.example/gpu-test", json={"matrix_size":256,"iterations":2},
-                                 timeout=(5,120), allow_redirects=False)
+                                 timeout=(5,120), allow_redirects=False, headers=post.call_args.kwargs["headers"])
+    assert len(post.call_args.kwargs["headers"]["X-ColabCluster-Request-ID"]) == 32
     response.close.assert_called_once()
 
 

@@ -44,6 +44,8 @@ def test_concurrent_dispatch_and_aggregation(client, monkeypatch):
     def post(url, **kwargs):
         index=kwargs["json"]["partition"]
         assert url == f"https://worker-{index}.example/inference"
+        request_id = kwargs.pop("headers")["X-ColabCluster-Request-ID"]
+        assert len(request_id) == 32 and int(request_id, 16) >= 0
         assert kwargs == dict(json={"partition":index},timeout=(5,120),allow_redirects=False)
         assert set(states(client).values()) == {"busy"}
         # A ready heartbeat cannot erase the reservation during dispatch.
@@ -105,7 +107,10 @@ def test_failure_never_reports_success_and_restores_pair(client,monkeypatch,inde
     response=client.post("/inference/two-worker",json={})
     assert response.status_code == code
     assert sorted(completed) == [0,1]
-    assert set(states(client).values()) == {"ready"}
+    expected = {identifier: "ready" for identifier in IDS}
+    if failure in ("timeout", "connection", "http"):
+        expected[IDS[index]] = "error"
+    assert states(client) == expected
 
 
 @pytest.mark.parametrize("body",[{"code":"print(1)"},{"worker_ids":[IDS[0],IDS[0]]},{"total_samples":128}])
@@ -188,20 +193,22 @@ def test_failure_waits_for_peer_before_releasing_reservations(client,monkeypatch
         finally:
             release.set()
         assert pending.result().status_code == 502
-    assert set(states(client).values()) == {"ready"}
+    assert states(client) == {IDS[0]: "error", IDS[1]: "ready"}
 
 
-def test_removed_worker_is_not_restored(client,monkeypatch):
+def test_active_pair_cannot_be_unregistered(client,monkeypatch):
     barrier=Barrier(2,timeout=5)
     def post(url,**kwargs):
         part=kwargs["json"]["partition"]
         if part == 0:
-            client.post("/workers/unregister",json={"worker_id":IDS[0]})
+            assert client.post("/workers/unregister",json={"worker_id":IDS[0]}).status_code == 409
         barrier.wait()
         response=Mock(status_code=200);response.json.return_value=result(part)
         return response
     monkeypatch.setattr("controller.inference.requests.post",post)
     assert client.post("/inference/two-worker",json={}).status_code == 200
+    assert states(client) == {IDS[0]:"ready", IDS[1]:"ready"}
+    assert client.post("/workers/unregister",json={"worker_id":IDS[0]}).status_code == 200
     assert states(client) == {IDS[1]:"ready"}
 
 

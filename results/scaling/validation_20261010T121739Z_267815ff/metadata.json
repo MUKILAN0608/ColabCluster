@@ -1,0 +1,85 @@
+{
+  "experiment_id": "validation_20261010T121739Z_267815ff",
+  "created_utc": "2026-10-10T12:17:39.936373+00:00",
+  "method": {
+    "model": "SmallCNN",
+    "model_seed": 0,
+    "input_seed_base": 1000,
+    "input_block_samples": 32,
+    "dtype": "float32",
+    "device": "cuda:0",
+    "warmups": 10,
+    "timed_forwards": 1,
+    "timing": "client perf_counter complete HTTP body before JSON parsing",
+    "order": "seeded balanced alternating rounds",
+    "protocol": "scaling-validation-v1"
+  },
+  "seed": 20261010,
+  "targets": {
+    "256": 5,
+    "512": 5,
+    "768": 5,
+    "1024": 20,
+    "1536": 5,
+    "2048": 5,
+    "3072": 5,
+    "4096": 20
+  },
+  "timeout_seconds": 135.0,
+  "attempt_multiplier": 2,
+  "software": {
+    "python": "3.14.3",
+    "git_commit": "21e2a4033fd0e792b2726760e006880c45b6f52f",
+    "packages": {
+      "requests": "2.34.2",
+      "pydantic": "2.13.5",
+      "matplotlib": "3.11.2"
+    },
+    "source_sha256": {
+      "common/scaling.py": "bd0717011d689d64cae8eed07df61fd1d89659b2ab31e65528dfd345ae0d8b14",
+      "worker/inference.py": "7d5abb426aa9852b3d180d718190d5bbb1ad17849432f3f5b657056876c9fcaf",
+      "worker/cnn_test.py": "3fbfebc251a939c06a26d9382c323224183960ff375b78cbd58266d7dc0feb12",
+      "controller/scaling.py": "72cc00162913cc7204cacf5efe0876d3e72d7382982011e989cce5350a1e6297",
+      "scripts/validate_scaling.py": "9cda480d72b001920ef484b02ef2656c1a4e63412f2128d3f34cacddbae7c67f",
+      "scripts/analyze_scaling_validation.py": "459d144b9e6e7622fbb5c047334cb58a7941afacf64966dacda81b398e9a9ed3"
+    }
+  },
+  "stages": [
+    1024,
+    4096,
+    256,
+    512,
+    768,
+    1536,
+    2048,
+    3072
+  ],
+  "complete": true,
+  "stop_reason": "",
+  "workers": {
+    "COLAB-GPU-TEST": {
+      "worker_id": "COLAB-GPU-TEST",
+      "gpu": "Tesla T4",
+      "gpu_memory": 14.56317138671875,
+      "registered_at": "2026-10-10T12:13:07.626229Z",
+      "cuda_available": true,
+      "software": {
+        "platform": "Linux",
+        "python_version": "3.13.15",
+        "torch_version": "2.11.0+cu130"
+      }
+    },
+    "COLAB-GPU-TEST-2": {
+      "worker_id": "COLAB-GPU-TEST-2",
+      "gpu": "Tesla T4",
+      "gpu_memory": 14.56317138671875,
+      "registered_at": "2026-10-10T12:16:39.433097Z",
+      "cuda_available": true,
+      "software": {
+        "platform": "Linux",
+        "python_version": "3.13.15",
+        "torch_version": "2.11.0+cu130"
+      }
+    }
+  }
+}

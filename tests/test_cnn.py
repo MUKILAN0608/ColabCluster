@@ -84,6 +84,8 @@ def test_forward_and_busy_state(client,monkeypatch):
     response.json.return_value=result().model_dump(mode="json")
     def post(url,**kwargs):
         assert url == "https://worker.example/cnn-test"
+        request_id = kwargs.pop("headers")["X-ColabCluster-Request-ID"]
+        assert len(request_id) == 32 and int(request_id, 16) >= 0
         assert kwargs == {"json":{},"timeout":(5,120),"allow_redirects":False}
         assert client.get("/workers").json()["workers"][0]["status"] == "busy"
         return response
@@ -98,7 +100,8 @@ def test_transport_failures_restore_state(client,monkeypatch,error,code):
     register(client,metadata={"diagnostic_url":"https://worker.example"})
     monkeypatch.setattr("controller.cnn_test.requests.post",Mock(side_effect=error))
     assert client.post("/workers/cnn/cnn-test",json={}).status_code == code
-    assert client.get("/workers").json()["workers"][0]["status"] == "ready"
+    assert client.get("/workers").json()["workers"][0]["status"] == "error"
+    assert client.get("/workers").json()["workers"][0]["metadata"]["execution"]["state"] == "unknown"
 
 
 @pytest.mark.parametrize("body",[{},result("other").model_dump(mode="json")])

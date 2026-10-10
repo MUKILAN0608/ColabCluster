@@ -1,6 +1,7 @@
 """HTTP-only forwarding; this module never imports the worker or PyTorch."""
 
 import requests
+from controller.transport import post_execution
 from fastapi import HTTPException
 from pydantic import HttpUrl, TypeAdapter, ValidationError
 
@@ -16,24 +17,8 @@ def forward_gpu_test(worker: WorkerInfo, payload: GpuTestRequest) -> GpuTestResp
             raise ValueError("Invalid diagnostic URL")
     except (ValidationError, ValueError):
         raise HTTPException(409, "Worker has no valid diagnostic_url; enable worker diagnostics") from None
+    response = post_execution(worker, str(url).rstrip("/") + "/gpu-test", payload.model_dump())
     try:
-        response = requests.post(
-            str(url).rstrip("/") + "/gpu-test", json=payload.model_dump(),
-            timeout=(5, 120), allow_redirects=False,
-        )
-    except requests.Timeout:
-        raise HTTPException(504, "Worker GPU diagnostic timed out; it may still be running") from None
-    except requests.RequestException:
-        raise HTTPException(502, "Unable to reach worker diagnostic endpoint") from None
-    try:
-        if response.status_code != 200:
-            detail = "Worker diagnostic failed"
-            try:
-                detail = str(response.json().get("detail", detail))[:500]
-            except (ValueError, AttributeError):
-                pass
-            status = response.status_code if response.status_code in (409, 503) else 502
-            raise HTTPException(status, detail)
         try:
             result = GpuTestResponse.model_validate(response.json())
         except (ValidationError, ValueError):

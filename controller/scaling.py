@@ -2,6 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from time import perf_counter
 import requests
+from controller.transport import post_execution
 from fastapi import HTTPException
 from common.scaling import ScalingBatchRequest, ScalingBatchResponse, ScalingResponse, WORKER_IDS
 from controller.inference import diagnostic_url
@@ -9,16 +10,8 @@ from controller.registry import UnknownWorkerError, WorkerNotReadyError
 
 
 def forward_scaling(worker, url, batch):
+    response = post_execution(worker, url, batch.model_dump())
     try:
-        response = requests.post(url, json=batch.model_dump(), timeout=(5,120), allow_redirects=False)
-    except requests.Timeout:
-        raise HTTPException(504, f"{worker.worker_id} timed out; remote work may continue") from None
-    except requests.RequestException:
-        raise HTTPException(502, f"Cannot reach {worker.worker_id}") from None
-    try:
-        if response.status_code != 200:
-            raise HTTPException(response.status_code if response.status_code in (409,503) else 502,
-                                f"Scaling inference failed on {worker.worker_id}: HTTP {response.status_code}")
         try:
             result = ScalingBatchResponse.model_validate(response.json())
             if (result.worker_id != worker.worker_id or result.partition != batch.partition
@@ -56,4 +49,4 @@ def run_scaling(registry, payload, timeout):
             effective_throughput_images_per_second=payload.total_samples/elapsed)
     finally:
         for worker,original in reserved:
-            registry.finish_nn_test(worker.worker_id,original)
+            registry.finish_nn_test(worker.worker_id,original,worker)
